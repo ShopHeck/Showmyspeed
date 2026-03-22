@@ -134,10 +134,15 @@ export function Gauge({
           />
         </svg>
 
-        {/* Readout */}
+        {/* Readout — positioned in the open gap at the bottom of the arc */}
         <div
-          className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
-          style={{ paddingBottom: size * 0.05 }}
+          className="absolute pointer-events-none flex flex-col items-center"
+          style={{
+            left: 0,
+            right: 0,
+            top: size * 0.7,
+            transform: 'translateY(-50%)',
+          }}
         >
           <motion.span
             className="font-mono font-bold leading-none tabular-nums"
