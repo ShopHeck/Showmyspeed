@@ -50,11 +50,17 @@ export function useSpeedTest() {
       if (signal.aborted) return
 
       // --- Phase: upload ---
+      // Non-fatal: if the upload endpoint is unreachable, complete with upload = 0
       setPhase('upload')
-      const upload = await measureUpload(
-        (mbps) => setMetrics(m => ({ ...m, upload: mbps })),
-        signal
-      )
+      let upload = 0
+      try {
+        upload = await measureUpload(
+          (mbps) => setMetrics(m => ({ ...m, upload: mbps })),
+          signal
+        )
+      } catch (err) {
+        console.warn('Upload test failed, continuing without upload data:', err)
+      }
       setMetrics(m => ({ ...m, upload }))
 
       // Resolve IP info

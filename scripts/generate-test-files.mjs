@@ -11,7 +11,7 @@ const PUBLIC_DIR = new URL('../public/speedtest', import.meta.url).pathname
 mkdirSync(PUBLIC_DIR, { recursive: true })
 
 const files = [
-  { name: 'ping.bin', size: 1 },                   // 1 byte — just for RTT
+  { name: 'ping.bin', size: 1024 },                 // 1 KB — robust ping target
   { name: '1mb.bin', size: 1024 * 1024 },           // 1 MB
   { name: '10mb.bin', size: 10 * 1024 * 1024 },     // 10 MB
 ]
