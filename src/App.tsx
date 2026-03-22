@@ -4,6 +4,7 @@ import { Header } from './components/Header'
 import { Gauge } from './components/Gauge'
 import { MetricCard } from './components/MetricCard'
 import { ResultsPanel } from './components/ResultsPanel'
+import { CompareISPs } from './components/CompareISPs'
 import { useSpeedTest } from './hooks/useSpeedTest'
 
 const HistoryChart = lazy(() =>
@@ -12,8 +13,9 @@ const HistoryChart = lazy(() =>
 import { loadHistory } from './utils/storage'
 import type { TestResult } from './types'
 
-// Max gauge values
-const DL_MAX = 1000   // Mbps
+type Page = 'test' | 'compare' | 'history'
+
+const DL_MAX = 1000
 const UL_MAX = 500
 
 function phaseLabel(phase: string): string {
@@ -28,7 +30,7 @@ function phaseLabel(phase: string): string {
 }
 
 export default function App() {
-  const [tab, setTab] = useState<'test' | 'history'>('test')
+  const [page, setPage] = useState<Page>('test')
   const [history, setHistory] = useState<TestResult[]>([])
   const { phase, metrics, ipInfo, result, start, reset } = useSpeedTest()
 
@@ -36,7 +38,6 @@ export default function App() {
     setHistory(loadHistory())
   }, [])
 
-  // Refresh history after each completed test
   useEffect(() => {
     if (phase === 'complete') {
       setHistory(loadHistory())
@@ -46,27 +47,29 @@ export default function App() {
   const isRunning = phase === 'ping' || phase === 'download' || phase === 'upload'
   const activeGauge = phase === 'download' ? 'download' : phase === 'upload' ? 'upload' : null
 
+  function handleNavigate(p: Page) {
+    setPage(p)
+  }
+
   return (
     <div
       className="min-h-dvh flex flex-col"
-      style={{
-        background: 'radial-gradient(ellipse at 50% 0%, #0a1628 0%, #050d1a 60%)',
-      }}
+      style={{ background: 'radial-gradient(ellipse at 50% 0%, #0a1628 0%, #050d1a 60%)' }}
     >
-      {/* Subtle grid overlay */}
+      {/* Grid overlay */}
       <div
         className="fixed inset-0 pointer-events-none"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%2322d3ee' fill-opacity='0.025'%3E%3Crect x='29' y='0' width='2' height='60'/%3E%3Crect x='0' y='29' width='60' height='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%2322d3ee' fill-opacity='0.02'%3E%3Crect x='29' y='0' width='2' height='60'/%3E%3Crect x='0' y='29' width='60' height='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
           backgroundSize: '60px 60px',
         }}
       />
 
-      <Header activeTab={tab} onTabChange={setTab} />
+      <Header activePage={page} onNavigate={handleNavigate} />
 
       <main className="flex-1 flex flex-col items-center px-4 pb-16 pt-4 relative">
         <AnimatePresence mode="wait">
-          {tab === 'test' ? (
+          {page === 'test' && (
             <motion.div
               key="test"
               className="w-full max-w-4xl flex flex-col items-center gap-8"
@@ -75,7 +78,6 @@ export default function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              {/* Phase label */}
               <AnimatePresence mode="wait">
                 {(isRunning || phase === 'complete' || phase === 'error') && (
                   <motion.p
@@ -92,32 +94,13 @@ export default function App() {
                 )}
               </AnimatePresence>
 
-              {/* Gauges */}
               {phase !== 'complete' && (
-                <motion.div
-                  className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-12"
-                  layout
-                >
-                  <Gauge
-                    value={metrics.download}
-                    maxValue={DL_MAX}
-                    label="Download"
-                    color="#22d3ee"
-                    size={260}
-                    active={activeGauge === 'download'}
-                  />
-                  <Gauge
-                    value={metrics.upload}
-                    maxValue={UL_MAX}
-                    label="Upload"
-                    color="#818cf8"
-                    size={260}
-                    active={activeGauge === 'upload'}
-                  />
+                <motion.div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-12" layout>
+                  <Gauge value={metrics.download} maxValue={DL_MAX} label="Download" color="#22d3ee" size={260} active={activeGauge === 'download'} />
+                  <Gauge value={metrics.upload} maxValue={UL_MAX} label="Upload" color="#818cf8" size={260} active={activeGauge === 'upload'} />
                 </motion.div>
               )}
 
-              {/* Ping / Jitter / ISP cards — shown during and after test */}
               {phase !== 'idle' && phase !== 'complete' && (
                 <motion.div
                   className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl"
@@ -125,70 +108,61 @@ export default function App() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4 }}
                 >
-                  <MetricCard
-                    label="Ping"
-                    value={metrics.ping}
-                    unit="ms"
-                    color="#34d399"
-                    icon="⚡"
-                    animate={phase === 'ping'}
-                  />
-                  <MetricCard
-                    label="Jitter"
-                    value={metrics.jitter}
-                    unit="ms"
-                    color="#fbbf24"
-                    icon="〰️"
-                    animate={phase === 'ping'}
-                  />
-                  <MetricCard
-                    label="ISP"
-                    value={ipInfo?.isp ?? '—'}
-                    unit=""
-                    color="rgba(255,255,255,0.6)"
-                    icon="🌐"
-                    subtitle={ipInfo?.city ?? ''}
-                  />
-                  <MetricCard
-                    label="Location"
-                    value={ipInfo?.country ?? '—'}
-                    unit=""
-                    color="rgba(255,255,255,0.6)"
-                    icon="📍"
-                    subtitle={ipInfo?.ip ?? ''}
-                  />
+                  <MetricCard label="Ping" value={metrics.ping} unit="ms" color="#34d399" icon="⚡" animate={phase === 'ping'} />
+                  <MetricCard label="Jitter" value={metrics.jitter} unit="ms" color="#fbbf24" icon="〰️" animate={phase === 'ping'} />
+                  <MetricCard label="ISP" value={ipInfo?.isp ?? '—'} unit="" color="rgba(255,255,255,0.6)" icon="🌐" subtitle={ipInfo?.city ?? ''} />
+                  <MetricCard label="Location" value={ipInfo?.country ?? '—'} unit="" color="rgba(255,255,255,0.6)" icon="📍" subtitle={ipInfo?.ip ?? ''} />
                 </motion.div>
               )}
 
-              {/* Start / Stop button */}
               {phase !== 'complete' && (
-                <StartButton
-                  phase={phase}
-                  onStart={start}
-                  onStop={reset}
+                <StartButton phase={phase} onStart={start} onStop={reset} />
+              )}
+
+              {phase === 'complete' && result && (
+                <ResultsPanel
+                  result={result}
+                  onRetest={() => reset()}
+                  onCompare={() => handleNavigate('compare')}
                 />
               )}
 
-              {/* Results panel */}
-              {phase === 'complete' && result && (
-                <ResultsPanel result={result} onRetest={() => { reset(); }} />
-              )}
-
-              {/* Idle hero text */}
               {phase === 'idle' && (
-                <motion.p
-                  className="text-center text-sm max-w-sm"
-                  style={{ color: 'rgba(255,255,255,0.2)' }}
+                <motion.div
+                  className="flex flex-col items-center gap-4"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.5 }}
                 >
-                  Measures download, upload, ping & jitter using Cloudflare's global
-                  network. No signup. No ads. Nothing stored on servers.
-                </motion.p>
+                  <p className="text-center text-sm max-w-sm" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                    Measures download, upload, ping & jitter using Cloudflare's global network. No signup. No ads. Nothing stored on servers.
+                  </p>
+                  <button
+                    onClick={() => handleNavigate('compare')}
+                    className="text-sm transition-colors"
+                    style={{ color: '#22d3ee' }}
+                  >
+                    Compare Internet Providers →
+                  </button>
+                </motion.div>
               )}
             </motion.div>
-          ) : (
+          )}
+
+          {page === 'compare' && (
+            <motion.div
+              key="compare"
+              className="w-full"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <CompareISPs onTestSpeed={() => { handleNavigate('test') }} />
+            </motion.div>
+          )}
+
+          {page === 'history' && (
             <motion.div
               key="history"
               className="w-full max-w-3xl"
@@ -205,70 +179,40 @@ export default function App() {
                   <p className="font-mono text-sm animate-pulse">Loading...</p>
                 </div>
               }>
-                <HistoryChart
-                  history={history}
-                  onClear={() => setHistory([])}
-                />
+                <HistoryChart history={history} onClear={() => setHistory([])} />
               </Suspense>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
-      <footer className="text-center pb-8 px-4">
+      <footer
+        className="text-center pb-8 px-4 mt-auto"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
+      >
         <p className="text-xs" style={{ color: 'rgba(255,255,255,0.12)' }}>
-          ShowMySpeed.com — Powered by Cloudflare's global network ·{' '}
-          <span style={{ color: 'rgba(34,211,238,0.3)' }}>Privacy-first</span> · History stored locally only
+          © 2026 ShowMySpeed.com — Internet speed testing made simple.
         </p>
       </footer>
     </div>
   )
 }
 
-function StartButton({
-  phase,
-  onStart,
-  onStop,
-}: {
-  phase: string
-  onStart: () => void
-  onStop: () => void
-}) {
+function StartButton({ phase, onStart, onStop }: { phase: string; onStart: () => void; onStop: () => void }) {
   const isRunning = phase === 'ping' || phase === 'download' || phase === 'upload'
   const isError = phase === 'error'
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: 0.2, duration: 0.4 }}
-    >
+    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, duration: 0.4 }}>
       {isRunning ? (
         <button
           onClick={onStop}
           className="group relative w-32 h-32 rounded-full flex items-center justify-center transition-all"
-          style={{
-            background: 'rgba(239,68,68,0.08)',
-            border: '2px solid rgba(239,68,68,0.3)',
-          }}
+          style={{ background: 'rgba(239,68,68,0.08)', border: '2px solid rgba(239,68,68,0.3)' }}
         >
-          <span className="font-mono font-semibold text-sm" style={{ color: '#f87171' }}>
-            STOP
-          </span>
-          {/* Spinning ring */}
-          <svg
-            className="absolute inset-0 w-full h-full animate-spin"
-            style={{ animationDuration: '3s' }}
-            viewBox="0 0 100 100"
-          >
-            <circle
-              cx="50" cy="50" r="46"
-              fill="none"
-              stroke="#22d3ee"
-              strokeWidth="2"
-              strokeDasharray="60 230"
-              strokeLinecap="round"
-            />
+          <span className="font-mono font-semibold text-sm" style={{ color: '#f87171' }}>STOP</span>
+          <svg className="absolute inset-0 w-full h-full animate-spin" style={{ animationDuration: '3s' }} viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#22d3ee" strokeWidth="2" strokeDasharray="60 230" strokeLinecap="round" />
           </svg>
         </button>
       ) : (
@@ -280,35 +224,25 @@ function StartButton({
               ? 'rgba(239,68,68,0.1)'
               : 'radial-gradient(circle at 40% 35%, rgba(34,211,238,0.2) 0%, rgba(34,211,238,0.05) 100%)',
             border: `2px solid ${isError ? 'rgba(239,68,68,0.4)' : 'rgba(34,211,238,0.4)'}`,
-            boxShadow: isError
-              ? 'none'
-              : '0 0 40px rgba(34,211,238,0.1), inset 0 0 40px rgba(34,211,238,0.05)',
+            boxShadow: isError ? 'none' : '0 0 40px rgba(34,211,238,0.1), inset 0 0 40px rgba(34,211,238,0.05)',
           }}
           onMouseEnter={e => {
             if (!isError) {
-              ;(e.currentTarget as HTMLElement).style.boxShadow =
-                '0 0 60px rgba(34,211,238,0.25), inset 0 0 40px rgba(34,211,238,0.1)'
+              ;(e.currentTarget as HTMLElement).style.boxShadow = '0 0 60px rgba(34,211,238,0.25), inset 0 0 40px rgba(34,211,238,0.1)'
               ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(34,211,238,0.7)'
             }
           }}
           onMouseLeave={e => {
             if (!isError) {
-              ;(e.currentTarget as HTMLElement).style.boxShadow =
-                '0 0 40px rgba(34,211,238,0.1), inset 0 0 40px rgba(34,211,238,0.05)'
+              ;(e.currentTarget as HTMLElement).style.boxShadow = '0 0 40px rgba(34,211,238,0.1), inset 0 0 40px rgba(34,211,238,0.05)'
               ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(34,211,238,0.4)'
             }
           }}
         >
-          <span
-            className="font-mono font-bold text-lg tracking-widest"
-            style={{ color: isError ? '#f87171' : '#22d3ee' }}
-          >
+          <span className="font-mono font-bold text-lg tracking-widest" style={{ color: isError ? '#f87171' : '#22d3ee' }}>
             {isError ? 'RETRY' : 'GO'}
           </span>
-          <span
-            className="font-mono text-xs mt-1 tracking-wide"
-            style={{ color: isError ? 'rgba(248,113,113,0.6)' : 'rgba(34,211,238,0.5)' }}
-          >
+          <span className="font-mono text-xs mt-1 tracking-wide" style={{ color: isError ? 'rgba(248,113,113,0.6)' : 'rgba(34,211,238,0.5)' }}>
             {isError ? 'try again' : 'start test'}
           </span>
         </button>
