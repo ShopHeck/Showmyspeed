@@ -32,9 +32,9 @@ export function useSpeedTest() {
 
       // --- Phase: ping ---
       setPhase('ping')
-      const { ping, jitter } = await measurePing(10, (p, j) => {
+      const { ping, jitter } = await measurePing(6, (p, j) => {
         setMetrics(m => ({ ...m, ping: p, jitter: j }))
-      })
+      }, signal)
       setMetrics(m => ({ ...m, ping, jitter }))
 
       if (signal.aborted) return
