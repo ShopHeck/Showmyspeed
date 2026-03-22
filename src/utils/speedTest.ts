@@ -19,8 +19,11 @@ const PING_CANDIDATES = [
   `${BASE}`,                     // index.html — guaranteed to exist
 ]
 
-// Upload endpoints tried in order — first responding one is used for the full test
+// Upload endpoints tried in order — first responding one is used for the full test.
+// /upload is the self-hosted endpoint (available when running on showmyspeed.com).
+// Falls back to third-party mirrors on GitHub Pages / local dev.
 const UPLOAD_ENDPOINTS = [
+  '/upload',                    // self-hosted nginx endpoint — same-origin, no CORS needed
   'https://httpbun.com/post',   // httpbin fork, Cloudflare Workers
   'https://httpbin.org/post',   // classic httpbin fallback
 ]
@@ -77,18 +80,30 @@ export async function measurePing(
 
 // ── Download ──────────────────────────────────────────────────────────────────
 
-async function downloadChunk(
+// Number of parallel HTTP streams — mirrors what professional tools use
+const PARALLEL_STREAMS = 4
+
+/**
+ * Downloads `url` across `streams` concurrent connections simultaneously.
+ * Returns the aggregate Mbps, or null on failure.
+ * Each stream gets a unique cache-busting param so browsers don't deduplicate.
+ */
+async function downloadParallel(
   url: string,
+  streams: number,
   signal?: AbortSignal
 ): Promise<number | null> {
   try {
     const start = performance.now()
-    const res = await fetch(`${url}?_=${Date.now()}`, { signal })
-    if (!res.ok) return null
-    const buffer = await res.arrayBuffer()
+    const requests = Array.from({ length: streams }, (_, i) =>
+      fetch(`${url}?s=${i}&_=${Date.now()}`, { signal, cache: 'no-store' })
+        .then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`)))
+    )
+    const buffers = await Promise.all(requests)
     const elapsed = (performance.now() - start) / 1000
     if (elapsed === 0) return null
-    return (buffer.byteLength * 8) / elapsed / 1_000_000
+    const totalBytes = buffers.reduce((sum, b) => sum + b.byteLength, 0)
+    return (totalBytes * 8) / elapsed / 1_000_000
   } catch {
     return null
   }
@@ -98,27 +113,22 @@ export async function measureDownload(
   onProgress: (mbps: number) => void,
   signal?: AbortSignal
 ): Promise<number> {
-  // Stages: start with 1 MB file (warm-up) then switch to 10 MB file
-  const stages: Array<{ url: string; runs: number; warmup?: boolean }> = [
-    { url: SMALL_FILE, runs: 2, warmup: true },  // warm up connection
-    { url: LARGE_FILE, runs: 2 },                 // accurate measurement
-    { url: LARGE_FILE, runs: 2 },
-  ]
+  // Warm-up: single 1 MB fetch to establish TCP connection
+  try {
+    const res = await fetch(`${SMALL_FILE}?_=${Date.now()}`, { signal, cache: 'no-store' })
+    if (res.ok) await res.arrayBuffer()
+  } catch { /* ignore warm-up failures */ }
 
   const samples: number[] = []
 
-  for (const stage of stages) {
+  // 3 rounds of parallel downloads for a stable measurement
+  for (let round = 0; round < 3; round++) {
     if (signal?.aborted) break
-    for (let i = 0; i < stage.runs; i++) {
-      if (signal?.aborted) break
-      const mbps = await downloadChunk(stage.url, signal)
-      if (mbps == null) continue
-      if (!stage.warmup) {
-        samples.push(mbps)
-        const avg = samples.reduce((s, v) => s + v, 0) / samples.length
-        onProgress(Math.round(avg * 10) / 10)
-      }
-    }
+    const mbps = await downloadParallel(LARGE_FILE, PARALLEL_STREAMS, signal)
+    if (mbps == null) continue
+    samples.push(mbps)
+    const avg = samples.reduce((s, v) => s + v, 0) / samples.length
+    onProgress(Math.round(avg * 10) / 10)
   }
 
   if (samples.length === 0) throw new Error(
@@ -126,7 +136,6 @@ export async function measureDownload(
     `Tried: ${SMALL_FILE} and ${LARGE_FILE}`
   )
   const sorted = [...samples].sort((a, b) => a - b)
-  // 90th-percentile of samples
   return Math.round(sorted[Math.floor(sorted.length * 0.9)] * 10) / 10
 }
 
@@ -162,6 +171,7 @@ function uploadChunk(
 
     xhr.onload = () => {
       signal?.removeEventListener('abort', onAbort)
+      if (xhr.status < 200 || xhr.status >= 300) { resolve(null); return }
       const elapsed = (performance.now() - start) / 1000
       resolve(elapsed > 0 ? Math.round(((bytes * 8) / elapsed / 1_000_000) * 10) / 10 : null)
     }
