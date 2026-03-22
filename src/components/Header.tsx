@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-type Page = 'test' | 'compare' | 'history'
+type Page = 'test' | 'compare' | 'tips' | 'history'
 
 interface HeaderProps {
   activePage: Page

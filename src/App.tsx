@@ -5,6 +5,7 @@ import { Gauge } from './components/Gauge'
 import { MetricCard } from './components/MetricCard'
 import { ResultsPanel } from './components/ResultsPanel'
 import { CompareISPs } from './components/CompareISPs'
+import { SpeedTips } from './components/SpeedTips'
 import { useSpeedTest } from './hooks/useSpeedTest'
 
 const HistoryChart = lazy(() =>
@@ -13,7 +14,7 @@ const HistoryChart = lazy(() =>
 import { loadHistory } from './utils/storage'
 import type { TestResult } from './types'
 
-type Page = 'test' | 'compare' | 'history'
+type Page = 'test' | 'compare' | 'tips' | 'history'
 
 const DL_MAX = 1000
 const UL_MAX = 500
@@ -123,7 +124,7 @@ export default function App() {
                 <ResultsPanel
                   result={result}
                   onRetest={() => reset()}
-                  onCompare={() => handleNavigate('compare')}
+                  onCompare={() => handleNavigate('tips')}
                 />
               )}
 
@@ -146,6 +147,23 @@ export default function App() {
                   </button>
                 </motion.div>
               )}
+            </motion.div>
+          )}
+
+          {page === 'tips' && result && (
+            <motion.div
+              key="tips"
+              className="w-full max-w-2xl mx-auto"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <SpeedTips
+                result={result}
+                onCompare={() => handleNavigate('compare')}
+                onRetest={() => { reset(); handleNavigate('test') }}
+              />
             </motion.div>
           )}
 

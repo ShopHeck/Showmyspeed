@@ -9,38 +9,69 @@ interface ResultsPanelProps {
   onCompare: () => void
 }
 
+function fmt(n: number) {
+  return n >= 100 ? Math.round(n) : Number(n.toFixed(1))
+}
+
 function gradeUseCases(result: TestResult): UseCaseGrade[] {
   const { download, upload, ping, jitter } = result
+  const dl = fmt(download)
+  const ul = fmt(upload)
   return [
     {
       label: '4K Streaming',
       icon: '📺',
+      // Netflix 4K: 25 Mbps min; 4K HDR: 50 Mbps recommended
       pass: download >= 25,
-      reason: download >= 25 ? `${download} Mbps download — plenty for 4K` : `Need ≥25 Mbps, got ${download} Mbps`,
+      reason: download >= 50
+        ? `${dl} Mbps — excellent for 4K HDR on multiple screens`
+        : download >= 25
+        ? `${dl} Mbps — sufficient for 4K (50+ Mbps for HDR/multiple screens)`
+        : `Need ≥25 Mbps for 4K; got ${dl} Mbps`,
     },
     {
       label: 'Online Gaming',
       icon: '🎮',
-      pass: ping <= 50 && jitter <= 15 && download >= 10,
-      reason: ping <= 50 && jitter <= 15 ? `${ping}ms ping, ${jitter}ms jitter — great` : `Ping: ${ping}ms, Jitter: ${jitter}ms (want ≤50ms / ≤15ms)`,
+      // Industry standard: ping ≤50ms, jitter ≤20ms, download ≥3 Mbps
+      pass: ping <= 50 && jitter <= 20 && download >= 3,
+      reason: ping <= 50 && jitter <= 20
+        ? `${ping}ms ping, ${jitter}ms jitter — low lag for online gaming`
+        : ping > 50
+        ? `Ping ${ping}ms is above the ≤50ms threshold for smooth gaming`
+        : `Jitter ${jitter}ms is above the ≤20ms threshold — may cause lag spikes`,
     },
     {
-      label: 'Video Calls',
+      label: 'HD Video Calls',
       icon: '📹',
-      pass: download >= 10 && upload >= 3 && jitter <= 30,
-      reason: download >= 10 && upload >= 3 ? `${download}↓ / ${upload}↑ Mbps — good for HD calls` : `Need ≥10 down / ≥3 up, got ${download}↓ / ${upload}↑`,
+      // Zoom HD: 3.8 Mbps up/down; Teams HD: 4 Mbps up/down
+      pass: download >= 4 && upload >= 3.8 && jitter <= 30,
+      reason: download >= 4 && upload >= 3.8
+        ? `${dl}↓ / ${ul}↑ Mbps — supports HD calls (Zoom, Teams, Meet)`
+        : upload < 3.8
+        ? `Upload ${ul} Mbps is low; HD calls need ≥3.8 Mbps up`
+        : `Need ≥4↓ / ≥3.8↑ Mbps for HD calls; got ${dl}↓ / ${ul}↑`,
     },
     {
       label: 'Remote Work',
       icon: '💼',
+      // Cloud apps, file sync, occasional large uploads
       pass: download >= 25 && upload >= 10,
-      reason: download >= 25 && upload >= 10 ? `${download}↓ / ${upload}↑ Mbps — solid for WFH` : `Need ≥25↓ / ≥10↑, got ${download}↓ / ${upload}↑`,
+      reason: download >= 25 && upload >= 10
+        ? `${dl}↓ / ${ul}↑ Mbps — solid for cloud apps and large file uploads`
+        : upload < 10
+        ? `Upload ${ul} Mbps is limiting; WFH benefits from ≥10 Mbps up`
+        : `Need ≥25↓ / ≥10↑ Mbps for full WFH productivity; got ${dl}↓ / ${ul}↑`,
     },
     {
-      label: 'Smart Home',
+      label: 'Smart Home (10+ devices)',
       icon: '🏠',
+      // Each smart device uses ~2–5 Mbps; 10 devices = ~50 Mbps buffer
       pass: download >= 50,
-      reason: download >= 50 ? `${download} Mbps handles multiple devices` : `Tight for many connected devices`,
+      reason: download >= 100
+        ? `${dl} Mbps comfortably handles 10+ simultaneous devices`
+        : download >= 50
+        ? `${dl} Mbps — sufficient for typical smart home usage`
+        : `${dl} Mbps may struggle when many devices are active simultaneously`,
     },
   ]
 }
