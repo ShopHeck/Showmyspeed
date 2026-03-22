@@ -232,6 +232,35 @@ export function ResultsPanel({ result, onRetest, onCompare }: ResultsPanelProps)
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
+      {/* Hero speed numbers */}
+      <motion.div
+        className="grid grid-cols-2 sm:grid-cols-4 gap-3"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        {[
+          { label: 'Download', value: result.download, unit: 'Mbps', color: '#22d3ee' },
+          { label: 'Upload',   value: result.upload,   unit: 'Mbps', color: '#818cf8' },
+          { label: 'Ping',     value: result.ping,     unit: 'ms',   color: '#34d399' },
+          { label: 'Jitter',   value: result.jitter,   unit: 'ms',   color: '#fbbf24' },
+        ].map(({ label, value, unit, color }) => (
+          <div
+            key={label}
+            className="rounded-2xl p-4 flex flex-col items-center justify-center gap-1"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <p className="text-xs font-mono uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              {label}
+            </p>
+            <p className="font-mono font-bold leading-none tabular-nums" style={{ fontSize: 32, color }}>
+              {value >= 100 ? Math.round(value) : value.toFixed(1)}
+            </p>
+            <p className="text-xs font-mono" style={{ color: 'rgba(255,255,255,0.3)' }}>{unit}</p>
+          </div>
+        ))}
+      </motion.div>
+
       {/* Score header */}
       <div className="text-center">
         <p className="text-sm font-mono uppercase tracking-widest text-white/30 mb-1">Use-case score</p>
