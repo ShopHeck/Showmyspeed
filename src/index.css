@@ -61,3 +61,41 @@
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* Animated background orbs */
+@keyframes orb-pulse {
+  0%, 100% { opacity: 0.12; transform: scale(1); }
+  50%       { opacity: 0.22; transform: scale(1.1); }
+}
+
+@keyframes orb-pulse-2 {
+  0%, 100% { opacity: 0.08; transform: scale(1.06); }
+  50%       { opacity: 0.16; transform: scale(0.94); }
+}
+
+.orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.orb-cyan {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, #22d3ee 0%, transparent 70%);
+  top: -200px;
+  left: 50%;
+  transform: translateX(-70%);
+  animation: orb-pulse 9s ease-in-out infinite;
+}
+
+.orb-indigo {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, #818cf8 0%, transparent 70%);
+  bottom: -150px;
+  right: -100px;
+  animation: orb-pulse-2 11s ease-in-out infinite;
+}

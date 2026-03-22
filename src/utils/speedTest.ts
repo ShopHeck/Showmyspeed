@@ -220,6 +220,54 @@ export async function measureUpload(
   return Math.round(sorted[Math.floor(sorted.length * 0.9)] * 10) / 10
 }
 
+// ── Speed Score ───────────────────────────────────────────────────────────────
+
+/** Returns a 0–100 composite score and a human label for the connection quality. */
+export function getSpeedScore(result: { download: number; upload: number; ping: number; jitter: number }): {
+  score: number
+  label: string
+  color: string
+} {
+  // Weights: download 40 | upload 20 | ping 25 | jitter 15  (total = 100)
+  // Caps: 200 Mbps download, 50 Mbps upload, 200 ms ping, 50 ms jitter
+  const downloadScore = Math.min(result.download / 200, 1) * 40
+  const uploadScore   = Math.min(result.upload   /  50, 1) * 20
+  const pingScore     = (1 - Math.min(result.ping   / 200, 1)) * 25
+  const jitterScore   = (1 - Math.min(result.jitter /  50, 1)) * 15
+  const score = Math.round(downloadScore + uploadScore + pingScore + jitterScore)
+
+  let label: string
+  let color: string
+  if      (score >= 85) { label = 'Excellent'; color = '#34d399' }
+  else if (score >= 70) { label = 'Great';     color = '#22d3ee' }
+  else if (score >= 50) { label = 'Good';      color = '#fbbf24' }
+  else if (score >= 30) { label = 'Fair';      color = '#f97316' }
+  else                  { label = 'Poor';      color = '#f87171' }
+
+  return { score, label, color }
+}
+
+/**
+ * Estimates what percentile a given speed falls in using a log-normal
+ * approximation fitted to Ookla Q4 2024 global fixed broadband averages.
+ * Returns a value from 1 to 99.
+ */
+export function estimatePercentile(speed: number, type: 'download' | 'upload'): number {
+  const median = type === 'download' ? 90 : 30   // global medians in Mbps
+  const sigma  = 1.1                              // log-normal shape parameter
+
+  const z = (Math.log(Math.max(speed, 0.1)) - Math.log(median)) / sigma
+
+  // Abramowitz & Stegun normal CDF approximation (error < 7.5e-8)
+  const absZ = Math.abs(z)
+  const t    = 1 / (1 + 0.2316419 * absZ)
+  const d    = 0.3989422804 * Math.exp(-0.5 * absZ * absZ)
+  const poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))
+  const cdf  = z >= 0 ? 1 - d * poly : d * poly
+
+  return Math.round(Math.max(1, Math.min(99, cdf * 100)))
+}
+
 // ── IP Info ───────────────────────────────────────────────────────────────────
 
 export async function fetchIpInfo() {

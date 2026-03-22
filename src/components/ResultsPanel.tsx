@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import type { TestResult, UseCaseGrade } from '../types'
-import { generateShareCard } from '../utils/share'
+import { getSpeedScore, estimatePercentile } from '../utils/speedTest'
 import { providers } from '../data/providers'
 
 interface ResultsPanelProps {
@@ -242,6 +243,8 @@ export function ResultsPanel({ result, onRetest, onCompare }: ResultsPanelProps)
   const grades = gradeUseCases(result)
   const tip = getTip(result)
   const passed = grades.filter(g => g.pass).length
+  const scoreData = getSpeedScore(result)
+  const [copied, setCopied] = useState(false)
 
   // Filter providers where at least download OR upload improves
   const fasterProviders = providers.filter(p =>
@@ -249,11 +252,23 @@ export function ResultsPanel({ result, onRetest, onCompare }: ResultsPanelProps)
   ).slice(0, 3)
 
   async function handleShare() {
-    const dataUrl = await generateShareCard(result)
-    const link = document.createElement('a')
-    link.download = `showmyspeed-${Date.now()}.png`
-    link.href = dataUrl
-    link.click()
+    const text =
+      `My internet speed:\n` +
+      `⬇ Download: ${fmt(result.download)} Mbps\n` +
+      `⬆ Upload: ${fmt(result.upload)} Mbps\n` +
+      `⏱ Ping: ${result.ping} ms\n` +
+      `📊 Speed Score: ${scoreData.score}/100 (${scoreData.label})\n\n` +
+      `Test yours at showmyspeed.com`
+
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: 'My Speed Test Results', text })
+        return
+      } catch { /* user cancelled — fall through to clipboard */ }
+    }
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
   }
 
   return (
@@ -263,6 +278,40 @@ export function ResultsPanel({ result, onRetest, onCompare }: ResultsPanelProps)
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
+      {/* Speed Score */}
+      <motion.div
+        className="flex flex-col items-center gap-3"
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="relative" style={{ width: 112, height: 112 }}>
+          <svg width="112" height="112" viewBox="0 0 112 112">
+            <circle cx="56" cy="56" r="46" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="9" />
+            <circle
+              cx="56" cy="56" r="46"
+              fill="none"
+              stroke={scoreData.color}
+              strokeWidth="9"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 46}`}
+              strokeDashoffset={`${2 * Math.PI * 46 * (1 - scoreData.score / 100)}`}
+              transform="rotate(-90 56 56)"
+              style={{ filter: `drop-shadow(0 0 8px ${scoreData.color}80)` }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-mono font-bold" style={{ fontSize: 28, color: scoreData.color, lineHeight: 1 }}>
+              {scoreData.score}
+            </span>
+          </div>
+        </div>
+        <div className="text-center">
+          <p className="font-bold text-lg leading-none" style={{ color: scoreData.color }}>{scoreData.label}</p>
+          <p className="text-xs mt-1 font-mono uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.25)' }}>Connection Score</p>
+        </div>
+      </motion.div>
+
       {/* Hero speed numbers */}
       <motion.div
         className="grid grid-cols-2 sm:grid-cols-4 gap-3"
@@ -271,11 +320,11 @@ export function ResultsPanel({ result, onRetest, onCompare }: ResultsPanelProps)
         transition={{ duration: 0.4 }}
       >
         {[
-          { label: 'Download', value: result.download, unit: 'Mbps', color: '#22d3ee' },
-          { label: 'Upload',   value: result.upload,   unit: 'Mbps', color: '#818cf8' },
-          { label: 'Ping',     value: result.ping,     unit: 'ms',   color: '#34d399' },
-          { label: 'Jitter',   value: result.jitter,   unit: 'ms',   color: '#fbbf24' },
-        ].map(({ label, value, unit, color }) => (
+          { label: 'Download', value: result.download, unit: 'Mbps', color: '#22d3ee', pct: estimatePercentile(result.download, 'download') },
+          { label: 'Upload',   value: result.upload,   unit: 'Mbps', color: '#818cf8', pct: estimatePercentile(result.upload,   'upload')   },
+          { label: 'Ping',     value: result.ping,     unit: 'ms',   color: '#34d399', pct: null },
+          { label: 'Jitter',   value: result.jitter,   unit: 'ms',   color: '#fbbf24', pct: null },
+        ].map(({ label, value, unit, color, pct }) => (
           <div
             key={label}
             className="rounded-2xl p-4 flex flex-col items-center justify-center gap-1"
@@ -288,6 +337,11 @@ export function ResultsPanel({ result, onRetest, onCompare }: ResultsPanelProps)
               {value >= 100 ? Math.round(value) : value.toFixed(1)}
             </p>
             <p className="text-xs font-mono" style={{ color: 'rgba(255,255,255,0.3)' }}>{unit}</p>
+            {pct !== null && (
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(34,211,238,0.5)' }}>
+                Top {100 - pct}%
+              </p>
+            )}
           </div>
         ))}
       </motion.div>
@@ -401,13 +455,24 @@ export function ResultsPanel({ result, onRetest, onCompare }: ResultsPanelProps)
         <button
           onClick={handleShare}
           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm transition-all"
-          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: copied ? '#34d399' : 'rgba(255,255,255,0.5)' }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-          </svg>
-          Sign up to save this result →
+          {copied ? (
+            <>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Copied to clipboard!
+            </>
+          ) : (
+            <>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+              Share Results
+            </>
+          )}
         </button>
         <button
           onClick={onCompare}

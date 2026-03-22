@@ -6,7 +6,9 @@ import { MetricCard } from './components/MetricCard'
 import { ResultsPanel } from './components/ResultsPanel'
 import { CompareISPs } from './components/CompareISPs'
 import { SpeedTips } from './components/SpeedTips'
+import { Footer } from './components/Footer'
 import { useSpeedTest } from './hooks/useSpeedTest'
+import { fetchIpInfo } from './utils/speedTest'
 
 const HistoryChart = lazy(() =>
   import('./components/HistoryChart').then(m => ({ default: m.HistoryChart }))
@@ -33,10 +35,12 @@ function phaseLabel(phase: string): string {
 export default function App() {
   const [page, setPage] = useState<Page>('test')
   const [history, setHistory] = useState<TestResult[]>([])
+  const [idleIpInfo, setIdleIpInfo] = useState<{ isp?: string; city?: string; country?: string } | null>(null)
   const { phase, metrics, ipInfo, result, start, reset } = useSpeedTest()
 
   useEffect(() => {
     setHistory(loadHistory())
+    fetchIpInfo().then(info => { if (info) setIdleIpInfo(info) })
   }, [])
 
   useEffect(() => {
@@ -57,6 +61,10 @@ export default function App() {
       className="min-h-dvh flex flex-col"
       style={{ background: 'radial-gradient(ellipse at 50% 0%, #0a1628 0%, #050d1a 60%)' }}
     >
+      {/* Animated background orbs */}
+      <div className="orb orb-cyan" aria-hidden="true" />
+      <div className="orb orb-indigo" aria-hidden="true" />
+
       {/* Grid overlay */}
       <div
         className="fixed inset-0 pointer-events-none"
@@ -130,18 +138,70 @@ export default function App() {
 
               {phase === 'idle' && (
                 <motion.div
-                  className="flex flex-col items-center gap-4"
+                  className="flex flex-col items-center gap-5 w-full max-w-xl"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
+                  transition={{ delay: 0.4 }}
                 >
-                  <p className="text-center text-sm max-w-sm" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                    Measures download, upload, ping & jitter using Cloudflare's global network. No signup. No ads. Nothing stored on servers.
-                  </p>
+                  {/* ISP detection card */}
+                  <AnimatePresence>
+                    {idleIpInfo && (
+                      <motion.div
+                        className="flex items-center gap-3 px-5 py-2.5 rounded-full"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.4 }}
+                      >
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#34d399', boxShadow: '0 0 6px #34d399' }} />
+                        <span className="text-sm">
+                          <span style={{ color: 'rgba(255,255,255,0.85)' }}>{idleIpInfo.isp}</span>
+                          {idleIpInfo.city && (
+                            <span style={{ color: 'rgba(255,255,255,0.35)' }}> · {idleIpInfo.city}, {idleIpInfo.country}</span>
+                          )}
+                        </span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Feature pills */}
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {['No account required', 'No ads ever', 'Data stays on device'].map(pill => (
+                      <span
+                        key={pill}
+                        className="text-xs px-3 py-1 rounded-full"
+                        style={{
+                          background: 'rgba(34,211,238,0.06)',
+                          border: '1px solid rgba(34,211,238,0.14)',
+                          color: 'rgba(34,211,238,0.65)',
+                        }}
+                      >
+                        ✓ {pill}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* How it works: 3 steps */}
+                  <div className="flex items-center gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.18)' }}>
+                    {[
+                      { icon: '⚡', label: 'Measure ping' },
+                      { icon: '⬇', label: 'Download test' },
+                      { icon: '⬆', label: 'Upload test' },
+                    ].map((step, i, arr) => (
+                      <span key={step.label} className="flex items-center gap-1.5">
+                        <span>{step.icon}</span>
+                        <span>{step.label}</span>
+                        {i < arr.length - 1 && <span className="ml-1" style={{ color: 'rgba(255,255,255,0.1)' }}>→</span>}
+                      </span>
+                    ))}
+                  </div>
+
                   <button
                     onClick={() => handleNavigate('compare')}
                     className="text-sm transition-colors"
-                    style={{ color: '#22d3ee' }}
+                    style={{ color: 'rgba(34,211,238,0.55)' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#22d3ee' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(34,211,238,0.55)' }}
                   >
                     Compare Internet Providers →
                   </button>
@@ -204,14 +264,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <footer
-        className="text-center pb-8 px-4 mt-auto"
-        style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
-      >
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.12)' }}>
-          © 2026 ShowMySpeed.com — Internet speed testing made simple.
-        </p>
-      </footer>
+      <Footer />
     </div>
   )
 }
