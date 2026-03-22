@@ -10,14 +10,6 @@ export default defineConfig({
     allowedHosts: 'all',
   },
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          react: ['react', 'react-dom'],
-          motion: ['framer-motion'],
-          charts: ['recharts'],
-        },
-      },
-    },
+    chunkSizeWarningLimit: 600,
   },
 })
