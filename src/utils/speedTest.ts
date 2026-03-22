@@ -5,10 +5,7 @@ const CF_BASE = 'https://speed.cloudflare.com'
 async function measureRtt(signal?: AbortSignal): Promise<number | null> {
   try {
     const start = performance.now()
-    const res = await fetch(`${CF_BASE}/__down?bytes=0`, {
-      cache: 'no-store',
-      signal,
-    })
+    const res = await fetch(`${CF_BASE}/__down?bytes=0&_=${Date.now()}`, { signal })
     if (!res.ok) return null
     await res.arrayBuffer()
     return performance.now() - start
@@ -55,9 +52,9 @@ export async function measurePing(
 /** Download N bytes and return Mbps; returns null on failure */
 async function downloadChunk(bytes: number, signal?: AbortSignal): Promise<number | null> {
   try {
-    const url = `${CF_BASE}/__down?bytes=${bytes}`
+    const url = `${CF_BASE}/__down?bytes=${bytes}&_=${Date.now()}`
     const start = performance.now()
-    const res = await fetch(url, { cache: 'no-store', signal })
+    const res = await fetch(url, { signal })
     if (!res.ok) return null
     const buffer = await res.arrayBuffer()
     const elapsed = (performance.now() - start) / 1000
@@ -107,7 +104,7 @@ function uploadChunk(
   signal?: AbortSignal
 ): Promise<number | null> {
   return new Promise((resolve) => {
-    const blob = new Blob([new Uint8Array(bytes)])
+    const blob = new Blob([new Uint8Array(bytes)], { type: 'text/plain' })
     const xhr = new XMLHttpRequest()
     const start = performance.now()
     let lastLoaded = 0
@@ -146,7 +143,6 @@ function uploadChunk(
 
     xhr.timeout = 30_000
     xhr.open('POST', `${CF_BASE}/__up`)
-    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
     xhr.send(blob)
   })
 }
@@ -185,9 +181,7 @@ export async function measureUpload(
 /** Fetch IP info from ip-api.com */
 export async function fetchIpInfo() {
   try {
-    const res = await fetch('https://ip-api.com/json/?fields=status,city,country,isp,org,query', {
-      cache: 'no-store',
-    })
+    const res = await fetch(`https://ip-api.com/json/?fields=status,city,country,isp,org,query&_=${Date.now()}`)
     const data = await res.json()
     if (data.status === 'success') {
       return {
