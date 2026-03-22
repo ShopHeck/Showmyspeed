@@ -19,8 +19,11 @@ const PING_CANDIDATES = [
   `${BASE}`,                     // index.html — guaranteed to exist
 ]
 
-// httpbun.com: maintained httpbin fork on Cloudflare Workers with Access-Control-Allow-Origin: *
-const UPLOAD_URL = 'https://httpbun.com/post'
+// Upload endpoints tried in order — first responding one is used for the full test
+const UPLOAD_ENDPOINTS = [
+  'https://httpbun.com/post',   // httpbin fork, Cloudflare Workers
+  'https://httpbin.org/post',   // classic httpbin fallback
+]
 
 // ── Ping ─────────────────────────────────────────────────────────────────────
 
@@ -130,6 +133,7 @@ export async function measureDownload(
 // ── Upload ────────────────────────────────────────────────────────────────────
 
 function uploadChunk(
+  url: string,
   bytes: number,
   onProgress: (mbps: number) => void,
   signal?: AbortSignal
@@ -142,10 +146,7 @@ function uploadChunk(
     let lastLoaded = 0
     let lastTime = start
 
-    const onAbort = () => {
-      xhr.abort()
-      resolve(null)
-    }
+    const onAbort = () => { xhr.abort(); resolve(null) }
     signal?.addEventListener('abort', onAbort, { once: true })
 
     xhr.upload.onprogress = (e) => {
@@ -162,37 +163,41 @@ function uploadChunk(
     xhr.onload = () => {
       signal?.removeEventListener('abort', onAbort)
       const elapsed = (performance.now() - start) / 1000
-      resolve(
-        elapsed > 0
-          ? Math.round(((bytes * 8) / elapsed / 1_000_000) * 10) / 10
-          : null
-      )
+      resolve(elapsed > 0 ? Math.round(((bytes * 8) / elapsed / 1_000_000) * 10) / 10 : null)
     }
 
-    xhr.onerror = () => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve(null)
-    }
+    xhr.onerror = () => { signal?.removeEventListener('abort', onAbort); resolve(null) }
+    xhr.ontimeout = () => { signal?.removeEventListener('abort', onAbort); resolve(null) }
 
-    xhr.ontimeout = () => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve(null)
-    }
-
-    xhr.timeout = 30_000
-    xhr.open('POST', UPLOAD_URL)
+    xhr.timeout = 15_000
+    xhr.open('POST', url)
     xhr.send(blob)
   })
+}
+
+/** Send 50 KB probe to each endpoint in order; return first URL that responds */
+async function findUploadEndpoint(signal?: AbortSignal): Promise<string | null> {
+  for (const url of UPLOAD_ENDPOINTS) {
+    const result = await uploadChunk(url, 50_000, () => {}, signal)
+    if (result !== null) {
+      console.info(`Upload endpoint: ${url}`)
+      return url
+    }
+  }
+  return null
 }
 
 export async function measureUpload(
   onProgress: (mbps: number) => void,
   signal?: AbortSignal
 ): Promise<number> {
-  const stages: Array<{ bytes: number; runs: number }> = [
-    { bytes: 500_000, runs: 1 },    // warm-up
-    { bytes: 2_000_000, runs: 3 },
-    { bytes: 5_000_000, runs: 2 },
+  const uploadUrl = await findUploadEndpoint(signal)
+  if (!uploadUrl) throw new Error('No upload endpoint available')
+
+  // 1 MB chunks — avoids body-size limits on third-party services
+  const stages: Array<{ bytes: number; runs: number; warmup?: boolean }> = [
+    { bytes: 500_000, runs: 1, warmup: true },
+    { bytes: 1_000_000, runs: 5 },
   ]
 
   const samples: number[] = []
@@ -201,12 +206,11 @@ export async function measureUpload(
     if (signal?.aborted) break
     for (let i = 0; i < stage.runs; i++) {
       if (signal?.aborted) break
-      const mbps = await uploadChunk(stage.bytes, onProgress, signal)
+      const mbps = await uploadChunk(uploadUrl, stage.bytes, onProgress, signal)
       if (mbps == null) continue
-      if (stage.bytes > 500_000) {
+      if (!stage.warmup) {
         samples.push(mbps)
-        const avg = samples.reduce((s, v) => s + v, 0) / samples.length
-        onProgress(Math.round(avg * 10) / 10)
+        onProgress(Math.round((samples.reduce((s, v) => s + v, 0) / samples.length) * 10) / 10)
       }
     }
   }
