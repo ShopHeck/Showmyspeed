@@ -278,13 +278,13 @@ export function CompareISPs({ onTestSpeed }: { onTestSpeed: () => void }) {
             <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
             <polyline points="17 6 23 6 23 12" />
           </svg>
-          US Internet Provider Guide 2025 — Independently Tested
+          US Internet Provider Guide 2026 — Independently Tested
         </span>
       </div>
 
       {/* Hero */}
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-white mb-3">Best Internet Providers<br />in the US — 2025</h1>
+        <h1 className="text-3xl font-bold text-white mb-3">Best Internet Providers<br />in the US — 2026</h1>
         <p className="text-base max-w-lg mx-auto" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.7 }}>
           We tested{' '}<strong style={{ color: 'rgba(255,255,255,0.8)' }}>{providers.length} major ISPs</strong>{' '}across speed, reliability, value, and customer experience.
           Here's who actually delivers — and who doesn't.
@@ -522,7 +522,7 @@ export function CompareISPs({ onTestSpeed }: { onTestSpeed: () => void }) {
 
       {/* Disclaimer */}
       <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.25)', lineHeight: 1.65 }}>
-        Speeds and prices reflect best-advertised plans as of early 2025. Actual speeds vary by location, infrastructure, and time of day.{' '}
+        Speeds and prices reflect best-advertised plans as of early 2026. Actual speeds vary by location, infrastructure, and time of day.{' '}
         Some links on this page are affiliate links — we may earn a commission if you sign up through them, at no extra cost to you.{' '}
         Affiliate relationships do not influence our editorial ratings or recommendations.
       </p>
