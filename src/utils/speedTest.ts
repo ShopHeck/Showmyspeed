@@ -218,7 +218,7 @@ export async function measureUpload(
   onProgress: (mbps: number) => void,
   signal?: AbortSignal,
 ): Promise<number> {
-  const uploadUrl = await findUploadEndpoint(signal)
+  const uploadUrl = (await findUploadEndpoint(signal)) as string
   if (!uploadUrl) throw new Error('No upload endpoint available')
 
   // Pre-allocate once; Blob constructor copies the buffer anyway
