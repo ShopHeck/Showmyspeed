@@ -42,10 +42,15 @@ async function measureRtt(signal?: AbortSignal): Promise<number | null> {
 }
 
 export async function measurePing(
-  samples = 6,
+  samples = 8,
   onProgress?: (ping: number, jitter: number) => void,
   signal?: AbortSignal
 ): Promise<{ ping: number; jitter: number }> {
+  // Warm up: first request includes TCP + TLS handshake — discard its timing
+  try {
+    await fetch(`${PING_CANDIDATES[0]}?warmup=${Date.now()}`, { method: 'HEAD', signal })
+  } catch { /* ignore — warmup failure is fine, real samples follow */ }
+
   const rtts: number[] = []
 
   for (let i = 0; i < samples; i++) {
@@ -79,10 +84,10 @@ export async function measurePing(
 
 // ── Download ──────────────────────────────────────────────────────────────────
 
-const DOWNLOAD_DURATION_MS = 8_000  // fixed test window
-const SAMPLE_INTERVAL_MS   = 200    // throughput sampling granularity
-const WARMUP_DISCARD_MS    = 1_000  // discard first 1 s (TCP slow-start)
-const DOWNLOAD_STREAMS     = 2      // parallel connections
+const DOWNLOAD_DURATION_MS = 10_000  // fixed test window
+const SAMPLE_INTERVAL_MS   = 200     // throughput sampling granularity
+const WARMUP_DISCARD_MS    = 2_000   // discard first 2 s (TCP slow-start across 4 streams)
+const DOWNLOAD_STREAMS     = 4       // parallel connections
 
 /**
  * Streams LARGE_FILE repeatedly for DOWNLOAD_DURATION_MS across
@@ -179,90 +184,36 @@ export async function measureDownload(
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 
-/**
- * POST `bytes` to `url`. Returns the end-to-end elapsed seconds, or null on
- * failure. Used for both the 50 KB endpoint probe and self-hosted warm-up.
- */
-function uploadChunkTimed(
-  url: string,
-  bytes: number,
-  signal?: AbortSignal,
-  timeoutMs = 120_000,
-): Promise<number | null> {
-  return new Promise((resolve) => {
-    const blob    = new Blob([new Uint8Array(bytes)], { type: 'text/plain' })
-    const xhr     = new XMLHttpRequest()
-    const start   = performance.now()
-    const onAbort = () => { xhr.abort(); resolve(null) }
-    signal?.addEventListener('abort', onAbort, { once: true })
-    xhr.onload    = () => {
-      signal?.removeEventListener('abort', onAbort)
-      if (xhr.status < 200 || xhr.status >= 300) { resolve(null); return }
-      resolve((performance.now() - start) / 1000)
-    }
-    xhr.onerror   = () => { signal?.removeEventListener('abort', onAbort); resolve(null) }
-    xhr.ontimeout = () => { signal?.removeEventListener('abort', onAbort); resolve(null) }
-    xhr.timeout   = timeoutMs
-    xhr.open('POST', url)
-    xhr.send(blob)
-  })
-}
-
-/**
- * POST `bytes` to `url`, reporting instantaneous Mbps via `onProgress` every
- * 100 ms. Returns the end-to-end Mbps, or null on failure.
- * Used for the fallback (third-party) upload path.
- */
-function uploadChunk(
-  url: string,
-  bytes: number,
-  onProgress: (mbps: number) => void,
-  signal?: AbortSignal,
-): Promise<number | null> {
-  return new Promise((resolve) => {
-    const blob    = new Blob([new Uint8Array(bytes)], { type: 'text/plain' })
-    const xhr     = new XMLHttpRequest()
-    const start   = performance.now()
-    let lastLoaded = 0
-    let lastTime   = start
-    const onAbort  = () => { xhr.abort(); resolve(null) }
-    signal?.addEventListener('abort', onAbort, { once: true })
-    xhr.upload.onprogress = (e) => {
-      const now = performance.now()
-      const dt  = (now - lastTime) / 1000
-      const dl  = e.loaded - lastLoaded
-      if (dt > 0.1 && dl > 0) {
-        onProgress(Math.round(((dl * 8) / dt / 1_000_000) * 10) / 10)
-        lastLoaded = e.loaded
-        lastTime   = now
-      }
-    }
-    xhr.onload    = () => {
-      signal?.removeEventListener('abort', onAbort)
-      if (xhr.status < 200 || xhr.status >= 300) { resolve(null); return }
-      const elapsed = (performance.now() - start) / 1000
-      resolve(elapsed > 0 ? Math.round(((bytes * 8) / elapsed / 1_000_000) * 10) / 10 : null)
-    }
-    xhr.onerror   = () => { signal?.removeEventListener('abort', onAbort); resolve(null) }
-    xhr.ontimeout = () => { signal?.removeEventListener('abort', onAbort); resolve(null) }
-    xhr.timeout   = 15_000
-    xhr.open('POST', url)
-    xhr.send(blob)
-  })
-}
+const UPLOAD_DURATION_MS = 10_000   // fixed test window
+const UPLOAD_WARMUP_MS   = 2_000    // discard first 2 s (mirrors download warmup)
+const UPLOAD_STREAMS     = 3        // parallel connections
+const UPLOAD_CHUNK_BYTES = 8_000_000 // 8 MB per chunk — large enough for continuous flow
 
 /** Send 50 KB probe to each endpoint in order; return first URL that responds */
 async function findUploadEndpoint(signal?: AbortSignal): Promise<string | null> {
   for (const url of UPLOAD_ENDPOINTS) {
-    const elapsed = await uploadChunkTimed(url, 50_000, signal, 8_000)
-    if (elapsed !== null) {
-      console.info(`Upload endpoint: ${url}`)
-      return url
-    }
+    const ok = await new Promise<boolean>((resolve) => {
+      const xhr = new XMLHttpRequest()
+      const onAbort = () => { xhr.abort(); resolve(false) }
+      signal?.addEventListener('abort', onAbort, { once: true })
+      xhr.onload    = () => { signal?.removeEventListener('abort', onAbort); resolve(xhr.status >= 200 && xhr.status < 300) }
+      xhr.onerror   = () => { signal?.removeEventListener('abort', onAbort); resolve(false) }
+      xhr.ontimeout = () => { signal?.removeEventListener('abort', onAbort); resolve(false) }
+      xhr.timeout   = 8_000
+      xhr.open('POST', url)
+      xhr.send(new Blob([new Uint8Array(50_000)], { type: 'application/octet-stream' }))
+    })
+    if (ok) { console.info(`Upload endpoint: ${url}`); return url }
   }
   return null
 }
 
+/**
+ * Mirrors measureDownload exactly: N parallel workers each POST UPLOAD_CHUNK_BYTES
+ * in a loop, reporting bytes sent via xhr.upload.onprogress into a shared counter.
+ * An interval sampler snapshots throughput every SAMPLE_INTERVAL_MS; the first
+ * UPLOAD_WARMUP_MS of samples are discarded, and the 90th percentile is returned.
+ */
 export async function measureUpload(
   onProgress: (mbps: number) => void,
   signal?: AbortSignal,
@@ -270,70 +221,76 @@ export async function measureUpload(
   const uploadUrl = await findUploadEndpoint(signal)
   if (!uploadUrl) throw new Error('No upload endpoint available')
 
-  const isOwnServer = uploadUrl === '/upload'
+  // Pre-allocate once; Blob constructor copies the buffer anyway
+  const uploadBuffer = new Uint8Array(UPLOAD_CHUNK_BYTES)
 
-  if (isOwnServer) {
-    // ── Self-hosted path: adaptive chunks over a 10-second budget ────────────
-    //
-    // Strategy: warm up with 2 MB to estimate speed, then send chunks that
-    // each target ~2 seconds of transfer time (capped 1–10 MB). Adaptive
-    // sizing keeps the measurement window sensible across 1–1000+ Mbps.
-    const BUDGET_MS = 10_000
+  let totalBytes = 0
+  const testStart = performance.now()
 
-    const warmupElapsed = await uploadChunkTimed(uploadUrl, 2_000_000, signal)
-    if (warmupElapsed == null) throw new Error('Upload warm-up failed')
+  const inner = new AbortController()
+  signal?.addEventListener('abort', () => inner.abort(), { once: true })
+  const stopTimer = setTimeout(() => inner.abort(), UPLOAD_DURATION_MS)
 
-    const estimatedMbps = (2_000_000 * 8) / warmupElapsed / 1_000_000
-    // Target 2-second chunks; clamp to [1 MB, 10 MB]
-    const targetBytes = (estimatedMbps * 2 * 1_000_000) / 8
-    let chunkBytes = Math.min(10_000_000, Math.max(1_000_000, Math.round(targetBytes)))
-
-    const samples: number[] = []
-    const budgetStart = performance.now()
-
-    while (performance.now() - budgetStart < BUDGET_MS && !signal?.aborted) {
-      const elapsed = await uploadChunkTimed(uploadUrl, chunkBytes, signal)
-      if (elapsed == null) break
-
-      const mbps = Math.round((chunkBytes * 8) / elapsed / 1_000_000 * 10) / 10
-      samples.push(mbps)
-
-      const sorted = [...samples].sort((a, b) => a - b)
-      onProgress(Math.round(sorted[Math.floor(sorted.length / 2)] * 10) / 10)
-
-      // Re-estimate chunk size based on the most recent measurement
-      chunkBytes = Math.min(10_000_000, Math.max(1_000_000, Math.round((mbps * 2 * 1_000_000) / 8)))
-    }
-
-    if (samples.length === 0) throw new Error('Upload test failed')
-    const sorted = [...samples].sort((a, b) => a - b)
-    return Math.round(sorted[Math.floor(sorted.length * 0.9)] * 10) / 10
-
-  } else {
-    // ── Fallback path: 1 MB × 5 chunks — stays within third-party limits ─────
-    const stages: Array<{ bytes: number; runs: number; warmup?: boolean }> = [
-      { bytes: 500_000,   runs: 1, warmup: true },
-      { bytes: 1_000_000, runs: 5 },
-    ]
-    const samples: number[] = []
-
-    for (const stage of stages) {
-      if (signal?.aborted) break
-      for (let i = 0; i < stage.runs; i++) {
-        if (signal?.aborted) break
-        const mbps = await uploadChunk(uploadUrl, stage.bytes, onProgress, signal)
-        if (mbps == null) continue
-        if (!stage.warmup) {
-          samples.push(mbps)
-          onProgress(Math.round((samples.reduce((s, v) => s + v, 0) / samples.length) * 10) / 10)
+  async function uploadWorker() {
+    while (!inner.signal.aborted) {
+      let lastLoaded = 0
+      await new Promise<void>((resolve) => {
+        const xhr = new XMLHttpRequest()
+        const onAbort = () => { xhr.abort(); resolve() }
+        inner.signal.addEventListener('abort', onAbort, { once: true })
+        xhr.upload.onprogress = (e) => {
+          totalBytes += e.loaded - lastLoaded
+          lastLoaded = e.loaded
         }
+        xhr.onload    = () => { inner.signal.removeEventListener('abort', onAbort); resolve() }
+        xhr.onerror   = () => { inner.signal.removeEventListener('abort', onAbort); resolve() }
+        xhr.ontimeout = () => { inner.signal.removeEventListener('abort', onAbort); resolve() }
+        xhr.timeout   = 60_000
+        xhr.open('POST', uploadUrl)
+        xhr.send(new Blob([uploadBuffer], { type: 'application/octet-stream' }))
+      })
+    }
+  }
+
+  const timedSamples: Array<{ mbps: number; t: number }> = []
+  let lastBytes = 0
+  let lastTime  = testStart
+
+  const ticker = setInterval(() => {
+    const now   = performance.now()
+    const dt    = now - lastTime
+    const delta = totalBytes - lastBytes
+    if (dt > 0) {
+      timedSamples.push({ mbps: (delta * 8) / (dt / 1000) / 1_000_000, t: now - testStart })
+      lastBytes = totalBytes
+      lastTime  = now
+      const valid = timedSamples.filter(s => s.t > UPLOAD_WARMUP_MS).map(s => s.mbps)
+      if (valid.length > 0) {
+        const sorted = [...valid].sort((a, b) => a - b)
+        onProgress(Math.round(sorted[Math.floor(sorted.length / 2)] * 10) / 10)
       }
     }
+  }, SAMPLE_INTERVAL_MS)
 
-    if (samples.length === 0) throw new Error('Upload test failed')
-    const sorted = [...samples].sort((a, b) => a - b)
-    return Math.round(sorted[Math.floor(sorted.length * 0.9)] * 10) / 10
+  try {
+    await Promise.allSettled(Array.from({ length: UPLOAD_STREAMS }, () => uploadWorker()))
+  } finally {
+    clearInterval(ticker)
+    clearTimeout(stopTimer)
   }
+
+  const valid = timedSamples.filter(s => s.t > UPLOAD_WARMUP_MS).map(s => s.mbps)
+
+  if (valid.length === 0) {
+    const elapsed = (performance.now() - testStart) / 1000
+    if (totalBytes > 0 && elapsed > 0) {
+      return Math.round((totalBytes * 8) / elapsed / 1_000_000 * 10) / 10
+    }
+    throw new Error('Upload test failed')
+  }
+
+  const sorted = [...valid].sort((a, b) => a - b)
+  return Math.round(sorted[Math.floor(sorted.length * 0.9)] * 10) / 10
 }
 
 // ── Speed Score ───────────────────────────────────────────────────────────────
