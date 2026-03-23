@@ -1,3 +1,8 @@
+# Redirect www → apex (permanent, preserves path)
+www.showmyspeed.com {
+	redir https://showmyspeed.com{uri} permanent
+}
+
 showmyspeed.com {
 	root * /var/www/showmyspeed
 
