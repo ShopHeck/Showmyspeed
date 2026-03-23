@@ -49,6 +49,12 @@ export default function App() {
     }
   }, [phase])
 
+  useEffect(() => {
+    if (page === 'tips' && !result) {
+      setPage('compare')
+    }
+  }, [page, result])
+
   const isRunning = phase === 'ping' || phase === 'download' || phase === 'upload'
   const activeGauge = phase === 'download' ? 'download' : phase === 'upload' ? 'upload' : null
 
@@ -132,7 +138,7 @@ export default function App() {
                 <ResultsPanel
                   result={result}
                   onRetest={() => reset()}
-                  onCompare={() => handleNavigate('tips')}
+                  onCompare={() => handleNavigate('compare')}
                 />
               )}
 
