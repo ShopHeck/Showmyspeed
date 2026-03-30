@@ -9,6 +9,10 @@ import { SpeedTips } from './components/SpeedTips'
 import { Footer } from './components/Footer'
 import { useSpeedTest } from './hooks/useSpeedTest'
 import { fetchIpInfo } from './utils/speedTest'
+import { FixSlowInternet } from './components/guides/FixSlowInternet'
+import { BestRouters } from './components/guides/BestRouters'
+import { IspThrottling } from './components/guides/IspThrottling'
+import { WifiVsEthernet } from './components/guides/WifiVsEthernet'
 
 const HistoryChart = lazy(() =>
   import('./components/HistoryChart').then(m => ({ default: m.HistoryChart }))
@@ -17,6 +21,7 @@ import { loadHistory } from './utils/storage'
 import type { TestResult } from './types'
 
 type Page = 'test' | 'compare' | 'tips' | 'history'
+  | 'fix-slow-internet' | 'best-routers' | 'isp-throttling' | 'wifi-vs-ethernet'
 
 const DL_MAX = 1000
 const UL_MAX = 500
@@ -36,6 +41,7 @@ export default function App() {
   const [page, setPage] = useState<Page>('test')
   const [history, setHistory] = useState<TestResult[]>([])
   const [idleIpInfo, setIdleIpInfo] = useState<{ isp?: string; city?: string; country?: string } | null>(null)
+  const [lastResult, setLastResult] = useState<TestResult | null>(null)
   const { phase, metrics, ipInfo, result, start, reset } = useSpeedTest()
 
   useEffect(() => {
@@ -44,16 +50,17 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (phase === 'complete') {
+    if (phase === 'complete' && result) {
+      setLastResult(result)
       setHistory(loadHistory())
     }
-  }, [phase])
+  }, [phase, result])
 
   useEffect(() => {
-    if (page === 'tips' && !result) {
+    if (page === 'tips' && !lastResult) {
       setPage('compare')
     }
-  }, [page, result])
+  }, [page, lastResult])
 
   const isRunning = phase === 'ping' || phase === 'download' || phase === 'upload'
   const activeGauge = phase === 'download' ? 'download' : phase === 'upload' ? 'upload' : null
@@ -138,7 +145,7 @@ export default function App() {
                 <ResultsPanel
                   result={result}
                   onRetest={() => reset()}
-                  onCompare={() => handleNavigate('compare')}
+                  onCompare={() => handleNavigate('tips')}
                 />
               )}
 
@@ -216,7 +223,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {page === 'tips' && result && (
+          {page === 'tips' && lastResult && (
             <motion.div
               key="tips"
               className="w-full max-w-2xl mx-auto"
@@ -226,7 +233,7 @@ export default function App() {
               transition={{ duration: 0.3 }}
             >
               <SpeedTips
-                result={result}
+                result={lastResult!}
                 onCompare={() => handleNavigate('compare')}
                 onRetest={() => { reset(); handleNavigate('test') }}
               />
@@ -243,6 +250,30 @@ export default function App() {
               transition={{ duration: 0.3 }}
             >
               <CompareISPs onTestSpeed={() => { handleNavigate('test') }} />
+            </motion.div>
+          )}
+
+          {page === 'fix-slow-internet' && (
+            <motion.div key="fix-slow-internet" className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+              <FixSlowInternet onTestSpeed={() => handleNavigate('test')} onCompare={() => handleNavigate('compare')} />
+            </motion.div>
+          )}
+
+          {page === 'best-routers' && (
+            <motion.div key="best-routers" className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+              <BestRouters onTestSpeed={() => handleNavigate('test')} />
+            </motion.div>
+          )}
+
+          {page === 'isp-throttling' && (
+            <motion.div key="isp-throttling" className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+              <IspThrottling onTestSpeed={() => handleNavigate('test')} onCompare={() => handleNavigate('compare')} />
+            </motion.div>
+          )}
+
+          {page === 'wifi-vs-ethernet' && (
+            <motion.div key="wifi-vs-ethernet" className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+              <WifiVsEthernet onTestSpeed={() => handleNavigate('test')} />
             </motion.div>
           )}
 

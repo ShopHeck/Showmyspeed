@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 type Page = 'test' | 'compare' | 'tips' | 'history'
+  | 'fix-slow-internet' | 'best-routers' | 'isp-throttling' | 'wifi-vs-ethernet'
 
 interface HeaderProps {
   activePage: Page
@@ -130,13 +131,19 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
             <div>
               <p className="text-sm font-semibold text-white mb-3">Popular Guides</p>
               <div className="space-y-1">
-                {['Fix Slow Internet', 'Best Routers 2025', 'Is My ISP Throttling?', 'Wi-Fi vs Ethernet'].map((guide) => (
+                {([
+                  { label: 'Fix Slow Internet',      page: 'fix-slow-internet'  as Page },
+                  { label: 'Best Routers 2026',      page: 'best-routers'       as Page },
+                  { label: 'Is My ISP Throttling?',  page: 'isp-throttling'     as Page },
+                  { label: 'Wi-Fi vs Ethernet',      page: 'wifi-vs-ethernet'   as Page },
+                ]).map(({ label, page }) => (
                   <button
-                    key={guide}
-                    className="block w-full text-left py-2.5 text-sm"
-                    style={{ color: 'rgba(255,255,255,0.45)' }}
+                    key={page}
+                    onClick={() => { onNavigate(page); setMenuOpen(false) }}
+                    className="block w-full text-left py-2.5 text-sm transition-colors"
+                    style={{ color: activePage === page ? '#22d3ee' : 'rgba(255,255,255,0.45)' }}
                   >
-                    {guide}
+                    {label}
                   </button>
                 ))}
               </div>
