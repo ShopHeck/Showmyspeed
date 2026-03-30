@@ -145,7 +145,10 @@ export default function App() {
                 <ResultsPanel
                   result={result}
                   onRetest={() => reset()}
-                  onCompare={() => handleNavigate('tips')}
+                  onCompare={() => {
+                    setLastResult(result)
+                    handleNavigate('tips')
+                  }}
                 />
               )}
 
