@@ -89,7 +89,7 @@ export default function App() {
       <Header activePage={page} onNavigate={handleNavigate} />
 
       <main className="flex-1 flex flex-col items-center px-4 pb-16 pt-4 relative">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="sync">
           {page === 'test' && (
             <motion.div
               key="test"
