@@ -42,6 +42,7 @@ export default function App() {
   const [history, setHistory] = useState<TestResult[]>([])
   const [idleIpInfo, setIdleIpInfo] = useState<{ isp?: string; city?: string; country?: string } | null>(null)
   const [lastResult, setLastResult] = useState<TestResult | null>(null)
+  const [showTips, setShowTips] = useState(false)
   const { phase, metrics, ipInfo, result, start, reset } = useSpeedTest()
 
   useEffect(() => {
@@ -54,13 +55,11 @@ export default function App() {
       setLastResult(result)
       setHistory(loadHistory())
     }
+    if (phase === 'idle') {
+      setShowTips(false)
+    }
   }, [phase, result])
 
-  useEffect(() => {
-    if (page === 'tips' && !lastResult) {
-      setPage('compare')
-    }
-  }, [page, lastResult])
 
   const isRunning = phase === 'ping' || phase === 'download' || phase === 'upload'
   const activeGauge = phase === 'download' ? 'download' : phase === 'upload' ? 'upload' : null
@@ -141,14 +140,22 @@ export default function App() {
                 <StartButton phase={phase} onStart={start} onStop={reset} />
               )}
 
-              {phase === 'complete' && result && (
+              {phase === 'complete' && result && !showTips && (
                 <ResultsPanel
                   result={result}
                   onRetest={() => reset()}
                   onCompare={() => {
                     setLastResult(result)
-                    handleNavigate('tips')
+                    setShowTips(true)
                   }}
+                />
+              )}
+
+              {phase === 'complete' && showTips && lastResult && (
+                <SpeedTips
+                  result={lastResult}
+                  onCompare={() => handleNavigate('compare')}
+                  onRetest={() => { setShowTips(false); reset() }}
                 />
               )}
 
@@ -226,22 +233,6 @@ export default function App() {
             </motion.div>
           )}
 
-          {page === 'tips' && lastResult && (
-            <motion.div
-              key="tips"
-              className="w-full max-w-2xl mx-auto"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <SpeedTips
-                result={lastResult!}
-                onCompare={() => handleNavigate('compare')}
-                onRetest={() => { reset(); handleNavigate('test') }}
-              />
-            </motion.div>
-          )}
 
           {page === 'compare' && (
             <motion.div
