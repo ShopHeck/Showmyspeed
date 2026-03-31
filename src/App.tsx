@@ -66,6 +66,7 @@ export default function App() {
 
   function handleNavigate(p: Page) {
     setPage(p)
+    window.scrollTo({ top: 0, behavior: 'instant' })
   }
 
   return (
