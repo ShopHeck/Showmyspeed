@@ -1,24 +1,31 @@
 # ShowMySpeed — Dev Notes for Claude
 
-## Critical: Never use AnimatePresence mode="wait"
+## Critical: Do NOT use AnimatePresence for top-level page transitions
 
-**Do not use `<AnimatePresence mode="wait">` anywhere in this project.**
+**Do not wrap the page router in `<AnimatePresence>`.**
 
-`mode="wait"` holds the screen blank for the entire exit-animation duration before mounting the next page. Even with a 0ms exit duration it still leaves a blank frame due to React commit scheduling. This caused a persistent blank-page bug on every page navigation that was extremely difficult to diagnose.
+Even `mode="sync"` causes a large gap above content: during the transition both the exiting and entering pages are in the DOM simultaneously. In a flex column, the entering page renders _below_ the exiting page's full height. Combined with `scrollTo(0,0)`, this makes the gap immediately visible.
 
-**Always use `mode="sync"`** (or omit the mode prop entirely, which also defaults to sync).
-
-With `mode="sync"` + instant exits (`exit={{ opacity: 0, transition: { duration: 0 } }}`), the old page disappears immediately and the new page fades in — seamless transitions with zero blank gap.
+**Use plain conditional rendering.** Each page's `motion.div` uses `initial={{ opacity: 0 }} animate={{ opacity: 1 }}` for a fade-in. Since only one page is in the DOM at a time, there is zero layout gap.
 
 ```tsx
-// ✅ Correct
-<AnimatePresence mode="sync">
-  {page === 'test' && <motion.div key="test" exit={{ opacity: 0, transition: { duration: 0 } }} ...>}
-  {page === 'compare' && <motion.div key="compare" exit={{ opacity: 0, transition: { duration: 0 } }} ...>}
-</AnimatePresence>
+// ✅ Correct — no AnimatePresence, plain conditional render
+<div className="w-full flex flex-col items-center">
+  {page === 'test' && (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+      ...
+    </motion.div>
+  )}
+  {page === 'compare' && (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+      ...
+    </motion.div>
+  )}
+</div>
 
-// ❌ Never do this — causes blank page on every navigation
-<AnimatePresence mode="wait">
+// ❌ Never do this — causes gap above content and/or blank pages
+<AnimatePresence mode="wait">  // blank page
+<AnimatePresence mode="sync">  // layout gap (exiting page takes up space while in DOM)
 ```
 
 ## Critical: SpeedTips renders inline, not as a separate route

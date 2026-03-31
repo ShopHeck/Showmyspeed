@@ -90,14 +90,13 @@ export default function App() {
       <Header activePage={page} onNavigate={handleNavigate} />
 
       <main className="flex-1 flex flex-col items-center px-4 pb-16 pt-4 relative">
-        <AnimatePresence mode="sync">
+        <div className="w-full flex flex-col items-center">
           {page === 'test' && (
             <motion.div
               key="test"
               className="w-full max-w-4xl flex flex-col items-center gap-8"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0 } }}
               transition={{ duration: 0.3 }}
             >
               <AnimatePresence mode="wait">
@@ -236,51 +235,37 @@ export default function App() {
 
 
           {page === 'compare' && (
-            <motion.div
-              key="compare"
-              className="w-full"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0 } }}
-              transition={{ duration: 0.3 }}
-            >
+            <motion.div className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
               <CompareISPs onTestSpeed={() => { handleNavigate('test') }} />
             </motion.div>
           )}
 
           {page === 'fix-slow-internet' && (
-            <motion.div key="fix-slow-internet" className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0 } }} transition={{ duration: 0.3 }}>
+            <motion.div className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
               <FixSlowInternet onTestSpeed={() => handleNavigate('test')} onCompare={() => handleNavigate('compare')} />
             </motion.div>
           )}
 
           {page === 'best-routers' && (
-            <motion.div key="best-routers" className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0 } }} transition={{ duration: 0.3 }}>
+            <motion.div className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
               <BestRouters onTestSpeed={() => handleNavigate('test')} />
             </motion.div>
           )}
 
           {page === 'isp-throttling' && (
-            <motion.div key="isp-throttling" className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0 } }} transition={{ duration: 0.3 }}>
+            <motion.div className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
               <IspThrottling onTestSpeed={() => handleNavigate('test')} onCompare={() => handleNavigate('compare')} />
             </motion.div>
           )}
 
           {page === 'wifi-vs-ethernet' && (
-            <motion.div key="wifi-vs-ethernet" className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0 } }} transition={{ duration: 0.3 }}>
+            <motion.div className="w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
               <WifiVsEthernet onTestSpeed={() => handleNavigate('test')} />
             </motion.div>
           )}
 
           {page === 'history' && (
-            <motion.div
-              key="history"
-              className="w-full max-w-3xl"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0 } }}
-              transition={{ duration: 0.3 }}
-            >
+            <motion.div className="w-full max-w-3xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
               <h2 className="font-mono text-sm uppercase tracking-widest mb-8 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
                 Test History
               </h2>
@@ -293,7 +278,7 @@ export default function App() {
               </Suspense>
             </motion.div>
           )}
-        </AnimatePresence>
+        </div>
       </main>
 
       <Footer />
