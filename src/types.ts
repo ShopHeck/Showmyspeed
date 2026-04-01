@@ -17,6 +17,10 @@ export interface TestResult {
   ip?: string
   city?: string
   country?: string
+  downloadSamples?: Array<{ t: number; mbps: number }>  // post-warmup, one per 200 ms
+  uploadSamples?:   Array<{ t: number; mbps: number }>
+  pingRtts?:        number[]
+  loadedPing?:      number  // median RTT during download (for bufferbloat grade)
 }
 
 export interface LiveMetrics {

@@ -45,7 +45,7 @@ export async function measurePing(
   samples = 8,
   onProgress?: (ping: number, jitter: number) => void,
   signal?: AbortSignal
-): Promise<{ ping: number; jitter: number }> {
+): Promise<{ ping: number; jitter: number; rtts: number[] }> {
   // Warm up: first request includes TCP + TLS handshake — discard its timing
   try {
     await fetch(`${PING_CANDIDATES[0]}?warmup=${Date.now()}`, { method: 'HEAD', signal })
@@ -79,7 +79,7 @@ export async function measurePing(
       ? Math.sqrt(rtts.reduce((s, v) => s + (v - mean) ** 2, 0) / rtts.length)
       : 0
 
-  return { ping: Math.round(median), jitter: Math.round(jitter) }
+  return { ping: Math.round(median), jitter: Math.round(jitter), rtts }
 }
 
 // ── Download ──────────────────────────────────────────────────────────────────
@@ -101,8 +101,9 @@ const DOWNLOAD_STREAMS     = 4       // parallel connections
  */
 export async function measureDownload(
   onProgress: (mbps: number) => void,
-  signal?: AbortSignal
-): Promise<number> {
+  signal?: AbortSignal,
+  onSample?: (sample: { t: number; mbps: number }) => void,
+): Promise<{ mbps: number; samples: Array<{ t: number; mbps: number }>; loadedPing: number | undefined }> {
   let totalBytes = 0
   const testStart = performance.now()
 
@@ -135,6 +136,22 @@ export async function measureDownload(
     }
   }
 
+  // Bufferbloat: measure latency under load every 500 ms during download.
+  // HEAD requests are tiny (headers only) and don't meaningfully compete
+  // with the 4 download streams. loadedPing vs idle ping = bufferbloat delta.
+  const loadedPings: number[] = []
+  let loadedPingBusy = false
+  const loadedPingInterval = setInterval(async () => {
+    if (inner.signal.aborted || loadedPingBusy) return
+    loadedPingBusy = true
+    const t = performance.now()
+    try {
+      await fetch(`${PING_CANDIDATES[0]}?ll=${Date.now()}`, { method: 'HEAD', signal: inner.signal })
+      loadedPings.push(performance.now() - t)
+    } catch { /* connection busy or aborted — skip sample */ }
+    loadedPingBusy = false
+  }, 500)
+
   // Sampler: snapshots delta bytes every SAMPLE_INTERVAL_MS
   const timedSamples: Array<{ mbps: number; t: number }> = []
   let lastBytes = 0
@@ -145,7 +162,9 @@ export async function measureDownload(
     const dt    = now - lastTime
     const delta = totalBytes - lastBytes
     if (dt > 0) {
-      timedSamples.push({ mbps: (delta * 8) / (dt / 1000) / 1_000_000, t: now - testStart })
+      const sample = { mbps: (delta * 8) / (dt / 1000) / 1_000_000, t: now - testStart }
+      timedSamples.push(sample)
+      onSample?.(sample)
       lastBytes = totalBytes
       lastTime  = now
       // Live progress: running median of post-warmup samples
@@ -161,16 +180,25 @@ export async function measureDownload(
     await Promise.allSettled(Array.from({ length: DOWNLOAD_STREAMS }, (_, i) => streamWorker(i)))
   } finally {
     clearInterval(ticker)
+    clearInterval(loadedPingInterval)
     clearTimeout(stopTimer)
   }
 
-  const valid = timedSamples.filter(s => s.t > WARMUP_DISCARD_MS).map(s => s.mbps)
+  const loadedPingMedian = loadedPings.length > 0
+    ? Math.round([...loadedPings].sort((a, b) => a - b)[Math.floor(loadedPings.length / 2)])
+    : undefined
 
-  if (valid.length === 0) {
+  const validSamples = timedSamples.filter(s => s.t > WARMUP_DISCARD_MS)
+
+  if (validSamples.length === 0) {
     // Fallback: use total bytes / elapsed when not enough windowed samples
     const elapsed = (performance.now() - testStart) / 1000
     if (totalBytes > 0 && elapsed > 0) {
-      return Math.round((totalBytes * 8) / elapsed / 1_000_000 * 10) / 10
+      return {
+        mbps: Math.round((totalBytes * 8) / elapsed / 1_000_000 * 10) / 10,
+        samples: [],
+        loadedPing: loadedPingMedian,
+      }
     }
     throw new Error(
       'Download test failed — test files may not be deployed yet. ' +
@@ -178,8 +206,12 @@ export async function measureDownload(
     )
   }
 
-  const sorted = [...valid].sort((a, b) => a - b)
-  return Math.round(sorted[Math.floor(sorted.length * 0.9)] * 10) / 10
+  const sorted = [...validSamples].sort((a, b) => a.mbps - b.mbps)
+  return {
+    mbps: Math.round(sorted[Math.floor(sorted.length * 0.9)].mbps * 10) / 10,
+    samples: validSamples,
+    loadedPing: loadedPingMedian,
+  }
 }
 
 // ── Upload ────────────────────────────────────────────────────────────────────
@@ -223,7 +255,8 @@ async function findUploadEndpoint(signal?: AbortSignal): Promise<string | null> 
 export async function measureUpload(
   onProgress: (mbps: number) => void,
   signal?: AbortSignal,
-): Promise<number> {
+  onSample?: (sample: { t: number; mbps: number }) => void,
+): Promise<{ mbps: number; samples: Array<{ t: number; mbps: number }> }> {
   const uploadUrl = (await findUploadEndpoint(signal)) as string
   if (!uploadUrl) throw new Error('No upload endpoint available')
 
@@ -267,7 +300,9 @@ export async function measureUpload(
     const dt    = now - lastTime
     const delta = totalBytes - lastBytes
     if (dt > 0) {
-      timedSamples.push({ mbps: (delta * 8) / (dt / 1000) / 1_000_000, t: now - testStart })
+      const sample = { mbps: (delta * 8) / (dt / 1000) / 1_000_000, t: now - testStart }
+      timedSamples.push(sample)
+      onSample?.(sample)
       lastBytes = totalBytes
       lastTime  = now
       const valid = timedSamples.filter(s => s.t > UPLOAD_WARMUP_MS).map(s => s.mbps)
@@ -285,18 +320,21 @@ export async function measureUpload(
     clearTimeout(stopTimer)
   }
 
-  const valid = timedSamples.filter(s => s.t > UPLOAD_WARMUP_MS).map(s => s.mbps)
+  const validSamples = timedSamples.filter(s => s.t > UPLOAD_WARMUP_MS)
 
-  if (valid.length === 0) {
+  if (validSamples.length === 0) {
     const elapsed = (performance.now() - testStart) / 1000
     if (totalBytes > 0 && elapsed > 0) {
-      return Math.round((totalBytes * 8) / elapsed / 1_000_000 * 10) / 10
+      return { mbps: Math.round((totalBytes * 8) / elapsed / 1_000_000 * 10) / 10, samples: [] }
     }
     throw new Error('Upload test failed')
   }
 
-  const sorted = [...valid].sort((a, b) => a - b)
-  return Math.round(sorted[Math.floor(sorted.length * 0.9)] * 10) / 10
+  const sorted = [...validSamples].sort((a, b) => a.mbps - b.mbps)
+  return {
+    mbps: Math.round(sorted[Math.floor(sorted.length * 0.9)].mbps * 10) / 10,
+    samples: validSamples,
+  }
 }
 
 // ── Speed Score ───────────────────────────────────────────────────────────────
@@ -345,6 +383,20 @@ export function estimatePercentile(speed: number, type: 'download' | 'upload'): 
   const cdf  = z >= 0 ? 1 - d * poly : d * poly
 
   return Math.round(Math.max(1, Math.min(99, cdf * 100)))
+}
+
+// ── Bufferbloat ───────────────────────────────────────────────────────────────
+
+/** Grades the bufferbloat based on how much latency increases under load. */
+export function getBufferbloatGrade(idlePing: number, loadedPing: number): {
+  grade: string; color: string; label: string
+} {
+  const increase = loadedPing - idlePing
+  if (increase < 5)   return { grade: 'A', color: '#34d399', label: 'Excellent' }
+  if (increase < 30)  return { grade: 'B', color: '#22d3ee', label: 'Good' }
+  if (increase < 60)  return { grade: 'C', color: '#fbbf24', label: 'Fair' }
+  if (increase < 200) return { grade: 'D', color: '#f97316', label: 'Poor' }
+  return              { grade: 'F', color: '#f87171', label: 'Severe' }
 }
 
 // ── Connection Pre-warm ───────────────────────────────────────────────────────

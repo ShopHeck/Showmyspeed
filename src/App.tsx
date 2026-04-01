@@ -7,6 +7,8 @@ import { ResultsPanel } from './components/ResultsPanel'
 import { CompareISPs } from './components/CompareISPs'
 import { SpeedTips } from './components/SpeedTips'
 import { Footer } from './components/Footer'
+import { LiveSpeedChart } from './components/LiveSpeedChart'
+import { AdBanner } from './components/AdBanner'
 import { useSpeedTest } from './hooks/useSpeedTest'
 import { fetchIpInfo, prewarmConnection } from './utils/speedTest'
 import { FixSlowInternet } from './components/guides/FixSlowInternet'
@@ -45,7 +47,7 @@ export default function App() {
   const [showTips, setShowTips] = useState(false)
   const [phaseProgress, setPhaseProgress] = useState(0)
   const phaseStartRef = useRef(0)
-  const { phase, metrics, ipInfo, result, start, reset } = useSpeedTest()
+  const { phase, metrics, ipInfo, result, liveChartData, start, reset } = useSpeedTest()
 
   useEffect(() => {
     setHistory(loadHistory())
@@ -157,6 +159,14 @@ export default function App() {
                 </motion.div>
               )}
 
+              {(phase === 'download' || phase === 'upload') && (
+                <LiveSpeedChart
+                  data={liveChartData}
+                  activePhase={phase}
+                  maxMbps={phase === 'download' ? DL_MAX : UL_MAX}
+                />
+              )}
+
               {phase !== 'idle' && phase !== 'complete' && (
                 <motion.div
                   className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl"
@@ -225,7 +235,7 @@ export default function App() {
 
                   {/* Feature pills */}
                   <div className="flex flex-wrap justify-center gap-2">
-                    {['No account required', 'No ads ever', 'Data stays on device'].map(pill => (
+                    {['No account required', 'Free forever', 'Data stays on device'].map(pill => (
                       <span
                         key={pill}
                         className="text-xs px-3 py-1 rounded-full"
@@ -239,6 +249,8 @@ export default function App() {
                       </span>
                     ))}
                   </div>
+
+                  <AdBanner size="leaderboard" />
 
                   {/* How it works: 3 steps */}
                   <div className="flex items-center gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.18)' }}>

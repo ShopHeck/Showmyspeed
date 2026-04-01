@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts'
 import type { TestResult, UseCaseGrade } from '../types'
-import { getSpeedScore, estimatePercentile } from '../utils/speedTest'
+import { getSpeedScore, estimatePercentile, getBufferbloatGrade } from '../utils/speedTest'
 import { providers } from '../data/providers'
+import { AdBanner } from './AdBanner'
 
 interface ResultsPanelProps {
   result: TestResult
@@ -12,6 +14,18 @@ interface ResultsPanelProps {
 
 function fmt(n: number) {
   return n >= 100 ? Math.round(n) : Number(n.toFixed(1))
+}
+
+function calcStats(samples: Array<{ t: number; mbps: number }>) {
+  const sorted = [...samples].sort((a, b) => a.mbps - b.mbps)
+  const n = sorted.length
+  const min = sorted[0].mbps
+  const max = sorted[n - 1].mbps
+  const median = n % 2 === 0
+    ? (sorted[n / 2 - 1].mbps + sorted[n / 2].mbps) / 2
+    : sorted[Math.floor(n / 2)].mbps
+  const p90 = sorted[Math.floor(n * 0.9)].mbps
+  return { min, median, p90, max }
 }
 
 function gradeUseCases(result: TestResult): UseCaseGrade[] {
@@ -381,6 +395,146 @@ export function ResultsPanel({ result, onRetest, onCompare }: ResultsPanelProps)
           </motion.div>
         ))}
       </div>
+
+      {/* Connection Analysis */}
+      {(result.downloadSamples && result.downloadSamples.length >= 2) && (
+        <motion.div
+          className="space-y-4"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+        >
+          <h3 className="font-bold text-white">Connection Analysis</h3>
+
+          {/* Speed Stability Chart */}
+          <div
+            className="rounded-2xl p-4"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+          >
+            <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              Speed Over Time
+            </p>
+            <div style={{ height: 120 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="dl-grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="ul-grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <YAxis hide domain={[0, 'auto']} />
+                  <Area
+                    data={result.downloadSamples}
+                    type="monotone"
+                    dataKey="mbps"
+                    name="Download"
+                    stroke="#22d3ee"
+                    strokeWidth={1.5}
+                    fill="url(#dl-grad)"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  {result.uploadSamples && result.uploadSamples.length >= 2 && (
+                    <Area
+                      data={result.uploadSamples}
+                      type="monotone"
+                      dataKey="mbps"
+                      name="Upload"
+                      stroke="#818cf8"
+                      strokeWidth={1.5}
+                      fill="url(#ul-grad)"
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  )}
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex gap-4 mt-2">
+              <span className="flex items-center gap-1.5 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                <span className="inline-block w-3 h-0.5 rounded" style={{ background: '#22d3ee' }} />
+                Download
+              </span>
+              {result.uploadSamples && result.uploadSamples.length >= 2 && (
+                <span className="flex items-center gap-1.5 text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  <span className="inline-block w-3 h-0.5 rounded" style={{ background: '#818cf8' }} />
+                  Upload
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Statistics Row */}
+          {result.downloadSamples.length >= 4 && (() => {
+            const { min, median, p90, max } = calcStats(result.downloadSamples!)
+            return (
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: 'Min', value: min, note: 'Lowest burst' },
+                  { label: 'Median', value: median, note: 'P50' },
+                  { label: 'P90', value: p90, note: 'Typical max' },
+                  { label: 'Max', value: max, note: 'Peak burst' },
+                ].map(({ label, value, note }) => (
+                  <div
+                    key={label}
+                    className="rounded-xl p-3 flex flex-col items-center gap-0.5"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+                  >
+                    <p className="text-xs font-mono uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.25)' }}>{label}</p>
+                    <p className="font-mono font-bold tabular-nums" style={{ fontSize: 18, color: '#22d3ee' }}>
+                      {fmt(value)}
+                    </p>
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>{note}</p>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
+          {/* Bufferbloat Grade */}
+          {result.loadedPing != null && (() => {
+            const { grade, color, label } = getBufferbloatGrade(result.ping, result.loadedPing!)
+            const increase = Math.round(result.loadedPing! - result.ping)
+            return (
+              <div
+                className="rounded-2xl p-4"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+              >
+                <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  Bufferbloat
+                </p>
+                <div className="flex items-center gap-4">
+                  <div
+                    className="rounded-xl flex items-center justify-center font-mono font-bold shrink-0"
+                    style={{ width: 56, height: 56, fontSize: 28, background: `${color}18`, border: `1px solid ${color}40`, color }}
+                  >
+                    {grade}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold" style={{ color }}>{label}</p>
+                    <div className="flex gap-3 mt-1 text-xs font-mono flex-wrap" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      <span>Idle: {result.ping} ms</span>
+                      <span>Under load: {Math.round(result.loadedPing!)} ms</span>
+                      <span>Increase: +{increase} ms</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs mt-3" style={{ color: 'rgba(255,255,255,0.3)', lineHeight: 1.5 }}>
+                  Low bufferbloat means your connection stays responsive even while uploading or downloading.
+                </p>
+              </div>
+            )
+          })()}
+        </motion.div>
+      )}
+
+      {/* Ad slot between analysis and faster plans */}
+      <AdBanner size="leaderboard" />
 
       {/* Tip */}
       <motion.div
