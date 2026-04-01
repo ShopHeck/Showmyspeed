@@ -189,23 +189,29 @@ const UPLOAD_WARMUP_MS   = 2_000    // discard first 2 s (mirrors download warmu
 const UPLOAD_STREAMS     = 3        // parallel connections
 const UPLOAD_CHUNK_BYTES = 8_000_000 // 8 MB per chunk — large enough for continuous flow
 
-/** Send 50 KB probe to each endpoint in order; return first URL that responds */
+/** Send 50 KB probe to all endpoints simultaneously; return first URL that responds OK */
 async function findUploadEndpoint(signal?: AbortSignal): Promise<string | null> {
-  for (const url of UPLOAD_ENDPOINTS) {
-    const ok = await new Promise<boolean>((resolve) => {
+  function probeOne(url: string): Promise<string> {
+    return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
-      const onAbort = () => { xhr.abort(); resolve(false) }
+      const onAbort = () => { xhr.abort(); reject(new Error('aborted')) }
       signal?.addEventListener('abort', onAbort, { once: true })
-      xhr.onload    = () => { signal?.removeEventListener('abort', onAbort); resolve(xhr.status >= 200 && xhr.status < 300) }
-      xhr.onerror   = () => { signal?.removeEventListener('abort', onAbort); resolve(false) }
-      xhr.ontimeout = () => { signal?.removeEventListener('abort', onAbort); resolve(false) }
+      xhr.onload    = () => { signal?.removeEventListener('abort', onAbort)
+                              xhr.status >= 200 && xhr.status < 300 ? resolve(url) : reject(new Error(`HTTP ${xhr.status}`)) }
+      xhr.onerror   = () => { signal?.removeEventListener('abort', onAbort); reject(new Error('error')) }
+      xhr.ontimeout = () => { signal?.removeEventListener('abort', onAbort); reject(new Error('timeout')) }
       xhr.timeout   = 8_000
       xhr.open('POST', url)
       xhr.send(new Blob([new Uint8Array(50_000)], { type: 'application/octet-stream' }))
     })
-    if (ok) { console.info(`Upload endpoint: ${url}`); return url }
   }
-  return null
+  try {
+    const url = await Promise.any(UPLOAD_ENDPOINTS.map(probeOne))
+    console.info(`Upload endpoint: ${url}`)
+    return url
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -339,6 +345,17 @@ export function estimatePercentile(speed: number, type: 'download' | 'upload'): 
   const cdf  = z >= 0 ? 1 - d * poly : d * poly
 
   return Math.round(Math.max(1, Math.min(99, cdf * 100)))
+}
+
+// ── Connection Pre-warm ───────────────────────────────────────────────────────
+
+/**
+ * Fires a silent HEAD request to the ping file at app mount so the TCP/TLS
+ * connection is already open when the user clicks GO. Makes the ping warmup
+ * in measurePing() effectively free.
+ */
+export async function prewarmConnection(): Promise<void> {
+  try { await fetch(`${PING_CANDIDATES[0]}?prewarm=1`, { method: 'HEAD' }) } catch { /* ignore */ }
 }
 
 // ── IP Info ───────────────────────────────────────────────────────────────────

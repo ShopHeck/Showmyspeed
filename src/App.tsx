@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Header } from './components/Header'
 import { Gauge } from './components/Gauge'
@@ -8,7 +8,7 @@ import { CompareISPs } from './components/CompareISPs'
 import { SpeedTips } from './components/SpeedTips'
 import { Footer } from './components/Footer'
 import { useSpeedTest } from './hooks/useSpeedTest'
-import { fetchIpInfo } from './utils/speedTest'
+import { fetchIpInfo, prewarmConnection } from './utils/speedTest'
 import { FixSlowInternet } from './components/guides/FixSlowInternet'
 import { BestRouters } from './components/guides/BestRouters'
 import { IspThrottling } from './components/guides/IspThrottling'
@@ -43,11 +43,14 @@ export default function App() {
   const [idleIpInfo, setIdleIpInfo] = useState<{ isp?: string; city?: string; country?: string } | null>(null)
   const [lastResult, setLastResult] = useState<TestResult | null>(null)
   const [showTips, setShowTips] = useState(false)
+  const [phaseProgress, setPhaseProgress] = useState(0)
+  const phaseStartRef = useRef(0)
   const { phase, metrics, ipInfo, result, start, reset } = useSpeedTest()
 
   useEffect(() => {
     setHistory(loadHistory())
     fetchIpInfo().then(info => { if (info) setIdleIpInfo(info) })
+    prewarmConnection()
   }, [])
 
   useEffect(() => {
@@ -59,6 +62,23 @@ export default function App() {
       setShowTips(false)
     }
   }, [phase, result])
+
+  // Phase durations for the progress bar (ms)
+  const PHASE_DURATION: Record<string, number> = { ping: 4000, download: 10000, upload: 12000 }
+
+  useEffect(() => {
+    if (phase === 'ping' || phase === 'download' || phase === 'upload') {
+      phaseStartRef.current = performance.now()
+      setPhaseProgress(0)
+      const id = setInterval(() => {
+        const elapsed = performance.now() - phaseStartRef.current
+        setPhaseProgress(Math.min(99, (elapsed / PHASE_DURATION[phase]) * 100))
+      }, 100)
+      return () => clearInterval(id)
+    } else {
+      setPhaseProgress(0)
+    }
+  }, [phase])
 
 
   const isRunning = phase === 'ping' || phase === 'download' || phase === 'upload'
@@ -99,21 +119,36 @@ export default function App() {
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
             >
-              <AnimatePresence mode="wait">
-                {(isRunning || phase === 'complete' || phase === 'error') && (
-                  <motion.p
-                    key={phase}
-                    className="text-sm font-mono tracking-wide"
-                    style={{ color: phase === 'error' ? '#f87171' : 'rgba(255,255,255,0.4)' }}
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {phaseLabel(phase)}
-                  </motion.p>
+              {phase === 'idle' && (
+                <div className="text-center">
+                  <h1 className="text-2xl font-bold text-white tracking-tight">How fast is your connection?</h1>
+                  <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Multi-stream test · 90th-percentile result · ~20 seconds</p>
+                </div>
+              )}
+
+              <div className="flex flex-col items-center gap-2 w-full">
+                <AnimatePresence mode="wait">
+                  {(isRunning || phase === 'complete' || phase === 'error') && (
+                    <motion.p
+                      key={phase}
+                      className="text-sm font-mono tracking-wide"
+                      style={{ color: phase === 'error' ? '#f87171' : 'rgba(255,255,255,0.4)' }}
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      {phaseLabel(phase)}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+
+                {isRunning && (
+                  <div className="w-48 h-0.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${phaseProgress}%`, background: '#22d3ee', transition: 'width 0.1s linear' }} />
+                  </div>
                 )}
-              </AnimatePresence>
+              </div>
 
               {phase !== 'complete' && (
                 <motion.div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-12" layout>
