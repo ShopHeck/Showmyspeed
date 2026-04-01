@@ -1,3 +1,51 @@
+showmyspeed.com is a internet speed test website.
+
+## Core Workflow Rules
+
+### Planning & Execution
+- When asked for a plan: output only the plan. No code.
+- When user approves ("yes", "do it", "push", etc.): execute exactly. No extra commentary.
+- Break all work into explicit phases. Max 5 files per phase. Complete Phase 1, verify, and wait for approval before Phase 2.
+- For tasks touching >5 files: use parallel sub-agents (5-8 files each).
+
+### Code Quality
+- Delete dead code first: unused imports, props, exports, debug logs, commented code. Commit cleanup separately.
+- After any refactor, remove anything now unused.
+- Write human-readable code that experienced devs would naturally produce. No robotic comments or excessive headers.
+- Fix architectural issues (duplicated state, inconsistent patterns) when spotted. Do not apply band-aids.
+- Do not over-engineer for unrequested future cases. Simple + correct > speculative.
+
+### Context & File Handling
+- After 10+ messages or any context compaction: re-read files before editing. Never trust memory.
+- For files >500 LOC: read in chunks (offset/limit).
+- Before every edit: re-read the target file.
+- After every edit: re-read to confirm changes applied correctly.
+- Limit edits to same file: max 3 without verification read.
+
+### References & Safety
+- When user references existing code: study it thoroughly and match patterns exactly.
+- When renaming/changing any name: perform separate greps for:
+  - Direct calls/references
+  - Type/interface/generic usage
+  - String literals
+  - Dynamic imports/requires
+  - Re-exports/barrel files
+  - Tests and mocks
+- Never duplicate state to fix display bugs. Maintain one source of truth.
+- Never delete a file without confirming no references remain.
+
+### Verification
+- Before reporting complete: re-read all modified files. Verify no broken references, no unused code, logic flows correctly.
+- After fixing a bug: explain root cause and suggest one guardrail to prevent the category in future.
+- When testing your own work: adopt fresh-user persona. Flag friction or unclear areas.
+
+## Housekeeping
+- If a file grows unwieldy: flag and suggest splitting.
+- For bulk identical edits: propose parallel batches and verify each.
+- Offer checkpoint before risky changes: "Checkpoint current state first?"
+
+Follow these rules strictly. They override any default minimal or fast-output tendencies.
+
 # ShowMySpeed — Dev Notes for Claude
 
 ## Critical: Do NOT use AnimatePresence for top-level page transitions
