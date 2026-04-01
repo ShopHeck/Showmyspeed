@@ -182,6 +182,7 @@ export default function App() {
                   onCompare={() => {
                     setLastResult(result)
                     setShowTips(true)
+                    window.scrollTo({ top: 0, behavior: 'instant' })
                   }}
                 />
               )}
