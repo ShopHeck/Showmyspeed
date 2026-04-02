@@ -30,7 +30,7 @@ const ROUTERS: Router[] = [
     pros: ['Wi-Fi 7 with 320 MHz channels', 'Excellent throughput at range', 'No subscription required', '10G multi-gig port'],
     cons: ['Overkill for plans under 500 Mbps', 'Large footprint', 'Premium price'],
     verdict: 'The best all-around router for households that want the latest technology and have a plan over 500 Mbps. Wi-Fi 7 delivers noticeably lower latency and better multi-device performance than Wi-Fi 6E.',
-    affiliateUrl: 'https://www.amazon.com/s?k=TP-Link+Archer+BE800',
+    affiliateUrl: 'https://amzn.to/4dnh4fR',
   },
   {
     name: 'ASUS RT-AX86U Pro',
@@ -43,7 +43,7 @@ const ROUTERS: Router[] = [
     pros: ['Dedicated gaming accelerator', 'ASUSWRT interface with QoS', 'Adaptive QoS prioritises gaming traffic', 'Strong 5 GHz performance'],
     cons: ['Requires ASUS subscription for some features', 'Bulky design'],
     verdict: 'ASUS leads in gaming router performance year after year. The RT-AX86U Pro\'s game acceleration and adaptive QoS keep ping consistent even when others on the network are streaming.',
-    affiliateUrl: 'https://www.amazon.com/s?k=ASUS+RT-AX86U+Pro',
+    affiliateUrl: 'https://amzn.to/4c2d2Y0',
   },
   {
     name: 'TP-Link Deco BE65 (3-pack)',
@@ -56,7 +56,7 @@ const ROUTERS: Router[] = [
     pros: ['Seamless roaming between nodes', 'Easy app-based setup', 'Wi-Fi 7 backhaul', 'Scales to large homes'],
     cons: ['Higher cost than single router', 'App required for full management'],
     verdict: 'The best mesh system for large homes or multi-floor setups where a single router leaves dead zones. The Wi-Fi 7 backhaul between nodes dramatically improves throughput compared to Wi-Fi 5 mesh systems.',
-    affiliateUrl: 'https://www.amazon.com/s?k=TP-Link+Deco+BE65',
+    affiliateUrl: 'https://amzn.to/418sahq',
   },
   {
     name: 'TP-Link Archer AX3000',
@@ -69,7 +69,7 @@ const ROUTERS: Router[] = [
     pros: ['Exceptional value under $80', 'Wi-Fi 6 with OFDMA', 'No subscription fees', 'Easy setup'],
     cons: ['No 2.5G port', 'Range limited vs premium models', 'USB 3.0 only'],
     verdict: 'For plans up to 500 Mbps, this router competes with models twice its price. If your current router is more than 4 years old, this upgrade alone often delivers a 30–60% real-world speed improvement.',
-    affiliateUrl: 'https://www.amazon.com/s?k=TP-Link+Archer+AX3000',
+    affiliateUrl: 'https://amzn.to/47DIRVA',
   },
   {
     name: 'Netgear Orbi RBK863S (3-pack)',
@@ -82,7 +82,7 @@ const ROUTERS: Router[] = [
     pros: ['Dedicated 6 GHz backhaul keeps client speeds high', 'Excellent coverage in 4,000+ sq ft homes', 'Handles 100+ devices without degradation'],
     cons: ['Very expensive', 'Orbi app has subscription tier', 'Overkill for most homes'],
     verdict: 'If you have a large home (4,000+ sq ft), multiple floors, or thick concrete/brick walls, the Orbi delivers where cheaper mesh systems give up. The dedicated 6 GHz backhaul is what separates it from the pack.',
-    affiliateUrl: 'https://www.amazon.com/s?k=Netgear+Orbi+RBK863S',
+    affiliateUrl: 'https://amzn.to/4sIcvkR',
   },
 ]
 
